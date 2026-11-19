@@ -1,0 +1,7 @@
+[package]
+name = "fusty_parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fusty_lexer = { path = "../fusty_lexer" }

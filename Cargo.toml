@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "crates/fusty_lexer",
+    "crates/fusty_parser",
 ]
 resolver = "2"
