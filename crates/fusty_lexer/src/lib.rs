@@ -51,5 +51,52 @@ impl<'a> Lexer<'a> {
         self.cursor.saturating_sub(self.line_start_cursor) + 1
     }
 
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, (String, Span)> {
+        let mut tokens = Vec::new();
 
+        loop {
+            self.skip_whitespace_and_comments()?;
+
+            let start_pos = self.current_pos();
+            let start_col = self.current_col();
+            let start_line = self.line;
+
+            let c = match self.advance() {
+                Some(c) => c,
+                None => {
+                    tokens.push(Token::new(
+                        TokenKind::Eof,
+                        Span::new(start_pos, start_pos, start_line, start_col),
+                    ));
+                    break;
+                }
+            };
+
+            let kind = match c {
+                '(' => TokenKind::LParen,
+                ')' => TokenKind::RParen,
+                '{' => TokenKind::LBrace,
+                '}' => TokenKind::RBrace,
+                '[' => TokenKind::LBracket,
+                ']' => TokenKind::RBracket,
+                ',' => TokenKind::Comma,
+                ';' => TokenKind::Semicolon,
+                '?' => TokenKind::Question,
+                '.' => TokenKind::Dot,
+
+                ':' => {
+                    if self.peek() == Some(':') {
+                        self.advance();
+                        TokenKind::DoubleColon
+                    } else {
+                        TokenKind::Colon
+                    }
+                }
+
+
+                _ => TokenKind::Eof,
+            };
+        }
+        Ok(tokens)
+    }
 }
