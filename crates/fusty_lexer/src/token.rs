@@ -35,6 +35,45 @@ pub enum TokenKind {
     FloatLit(f64),
     StringLit(String),
 
+    // Delimiters & Grouping
+    LParen,   // (
+    RParen,   // )
+    LBrace,   // {
+    RBrace,   // }
+    LBracket, // [
+    RBracket, // ]
 
+    // Operators & Punctuation
+    Comma,      // ,
+    Colon,      // :
+    DoubleColon,// ::
+    Semicolon,  // ;
+    Dot,        // .
+    Arrow,      // ->
+    FatArrow,   // =>
+    Plus,       // +
+    Minus,      // -
+    Star,       // *
+    Slash,      // /
+    Percent,    // %
+    Assign,     // =
+    PlusAssign, // +=
+    MinusAssign,// -=
+    StarAssign, // *=
+    SlashAssign,// /=
+    Eq,         // ==
+    NotEq,      // !=
+    Lt,         // <
+    LtEq,       // <=
+    Gt,         // >
+    GtEq,       // >=
+    And,        // &&
+    Or,         // ||
+    Bang,       // !
+    Underscore, // _
+    Question,   // ?
+
+    // Special
     Eof,
 }
+
