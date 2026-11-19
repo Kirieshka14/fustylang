@@ -173,10 +173,47 @@ impl<'a> Lexer<'a> {
                     }
                 }
 
+                '&' => {
+                    if self.peek() == Some('&') {
+                        self.advance();
+                        TokenKind::And
+                    } else {
+                        let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
+                        return Err(("Expected '&&', single '&' is not supported".into(), span));
+                    }
+                }
 
-                _ => TokenKind::Eof,
+                '|' => {
+                    if self.peek() == Some('|') {
+                        self.advance();
+                        TokenKind::Or
+                    } else {
+                        let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
+                        return Err(("Expected '||', single '|' is not supported".into(), span));
+                    }
+                }
+
+                '"' => self.lex_string(start_pos, start_line, start_col)?,
+
+                '0'..='9' => self.lex_number(c, start_pos, start_line, start_col)?,
+
+                'a'..='z' | 'A'..='Z' | '_' => self.lex_ident(c, start_pos, start_line, start_col),
+
+                other => {
+                    let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
+                    return Err((format!("Unexpected character: '{other}'"), span));
+                }
             };
+
+            let end_pos = self.current_pos();
+            tokens.push(Token::new(
+                kind,
+                Span::new(start_pos, end_pos, start_line, start_col),
+            ));
         }
+
         Ok(tokens)
     }
+
+
 }
