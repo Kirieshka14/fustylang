@@ -44,3 +44,29 @@ pub enum Type {
     Custom(String),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
+    pub expr: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Wildcard,
+    Literal(Literal),
+    Ident(String),
+    Variant {
+        enum_name: Option<String>,
+        variant_name: String,
+        bindings: Vec<String>,
+    },
+}
+
