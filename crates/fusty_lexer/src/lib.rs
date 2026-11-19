@@ -377,3 +377,28 @@ impl<'a> Lexer<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lexer_meow_and_vec2() {
+        let code = r#"
+            // Game combat script
+            fn update(mut self, dt: f32) {
+                let v = vec2(10.0, 20.0);
+                wait 0.2;
+                meow {
+                    let raw_ptr = 42;
+                }
+            }
+        "#;
+        let mut lexer = Lexer::new(code);
+        let tokens = lexer.tokenize().expect("Tokenization failed");
+        
+        let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert!(kinds.contains(&TokenKind::Meow));
+        assert!(kinds.contains(&TokenKind::Wait));
+        assert!(kinds.contains(&TokenKind::Vec2));
+    }
+}
