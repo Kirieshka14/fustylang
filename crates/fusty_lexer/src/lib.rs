@@ -266,5 +266,32 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
+    fn lex_string(&mut self, start_pos: usize, line: usize, col: usize) -> Result<TokenKind, (String, Span)> {
+        let mut s = String::new();
+        loop {
+            match self.advance() {
+                Some('"') => break,
+                Some('\\') => match self.advance() {
+                    Some('n') => s.push('\n'),
+                    Some('r') => s.push('\r'),
+                    Some('t') => s.push('\t'),
+                    Some('\\') => s.push('\\'),
+                    Some('"') => s.push('"'),
+                    Some(c) => s.push(c),
+                    None => {
+                        let span = Span::new(start_pos, self.current_pos(), line, col);
+                        return Err(("Unterminated escape in string literal".into(), span));
+                    }
+                },
+                Some(c) => s.push(c),
+                None => {
+                    let span = Span::new(start_pos, self.current_pos(), line, col);
+                    return Err(("Unterminated string literal".into(), span));
+                }
+            }
+        }
+        Ok(TokenKind::StringLit(s))
+    }
+
 
 }
