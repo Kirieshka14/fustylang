@@ -215,5 +215,56 @@ impl<'a> Lexer<'a> {
         Ok(tokens)
     }
 
+    fn skip_whitespace_and_comments(&mut self) -> Result<(), (String, Span)> {
+        loop {
+            match self.peek() {
+                Some(' ' | '\t' | '\r' | '\n') => {
+                    self.advance();
+                }
+                Some('/') if self.peek_next() == Some('/') => {
+                    // Single-line comment
+                    while let Some(c) = self.peek() {
+                        if c == '\n' {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                Some('/') if self.peek_next() == Some('*') => {
+                    // Multi-line comment (supports nesting, errors if unterminated)
+                    let start_pos = self.current_pos();
+                    let start_line = self.line;
+                    let start_col = self.current_col();
+                    self.advance(); // consume '/'
+                    self.advance(); // consume '*'
+                    let mut depth = 1usize;
+                    while depth > 0 {
+                        match self.peek() {
+                            Some('/') if self.peek_next() == Some('*') => {
+                                self.advance();
+                                self.advance();
+                                depth += 1;
+                            }
+                            Some('*') if self.peek_next() == Some('/') => {
+                                self.advance();
+                                self.advance();
+                                depth -= 1;
+                            }
+                            Some(_) => {
+                                self.advance();
+                            }
+                            None => {
+                                let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
+                                return Err(("Unterminated multi-line comment".into(), span));
+                            }
+                        }
+                    }
+                }
+                _ => break,
+            }
+        }
+        Ok(())
+    }
+
 
 }
