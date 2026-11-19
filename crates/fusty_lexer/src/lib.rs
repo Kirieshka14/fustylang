@@ -332,5 +332,48 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn lex_ident(&mut self, first_char: char, _start_pos: usize, _line: usize, _col: usize) -> TokenKind {
+        let mut ident = String::new();
+        ident.push(first_char);
 
+        while let Some(c) = self.peek() {
+            if c.is_alphanumeric() || c == '_' {
+                ident.push(c);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        match ident.as_str() {
+            "fn" => TokenKind::Fn,
+            "let" => TokenKind::Let,
+            "mut" => TokenKind::Mut,
+            "struct" => TokenKind::Struct,
+            "enum" => TokenKind::Enum,
+            "impl" => TokenKind::Impl,
+            "match" => TokenKind::Match,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "while" => TokenKind::While,
+            "for" => TokenKind::For,
+            "in" => TokenKind::In,
+            "return" => TokenKind::Return,
+            "break" => TokenKind::Break,
+            "continue" => TokenKind::Continue,
+            "meow" => TokenKind::Meow,     // Unsafe replacement!
+            "wait" => TokenKind::Wait,     // Coroutine sleep!
+            "yield" => TokenKind::Yield,
+            "spawn" => TokenKind::Spawn,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
+            "self" => TokenKind::SelfValue,
+            "Self" => TokenKind::SelfType,
+            "vec2" => TokenKind::Vec2,
+            "vec3" => TokenKind::Vec3,
+            "_" => TokenKind::Underscore,
+            _ => TokenKind::Ident(ident),
+        }
+    }
 }
+
