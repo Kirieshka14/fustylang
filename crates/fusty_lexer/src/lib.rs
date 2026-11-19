@@ -293,5 +293,44 @@ impl<'a> Lexer<'a> {
         Ok(TokenKind::StringLit(s))
     }
 
+    fn lex_number(&mut self, first_char: char, start_pos: usize, line: usize, col: usize) -> Result<TokenKind, (String, Span)> {
+        let mut num_str = String::new();
+        num_str.push(first_char);
+        let mut is_float = false;
+
+        while let Some(c) = self.peek() {
+            if c.is_ascii_digit() || c == '_' {
+                if c != '_' {
+                    num_str.push(c);
+                }
+                self.advance();
+            } else if !is_float && c == '.' && self.peek_next().map(|n| n.is_ascii_digit()).unwrap_or(false) {
+                is_float = true;
+                num_str.push(c);
+                self.advance(); // consume '.'
+            } else {
+                break;
+            }
+        }
+
+        if is_float {
+            match num_str.parse::<f64>() {
+                Ok(val) => Ok(TokenKind::FloatLit(val)),
+                Err(e) => {
+                    let span = Span::new(start_pos, self.current_pos(), line, col);
+                    Err((format!("Invalid float: {e}"), span))
+                }
+            }
+        } else {
+            match num_str.parse::<i64>() {
+                Ok(val) => Ok(TokenKind::IntLit(val)),
+                Err(e) => {
+                    let span = Span::new(start_pos, self.current_pos(), line, col);
+                    Err((format!("Invalid integer: {e}"), span))
+                }
+            }
+        }
+    }
+
 
 }
