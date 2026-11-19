@@ -205,3 +205,52 @@ pub struct FnDecl {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructField {
+    pub name: String,
+    pub is_mut: bool,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructDecl {
+    pub name: String,
+    pub fields: Vec<StructField>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub fields: Vec<Type>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumDecl {
+    pub name: String,
+    pub variants: Vec<EnumVariant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImplBlock {
+    pub target: String,
+    pub methods: Vec<FnDecl>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Item {
+    Fn(FnDecl),
+    Struct(StructDecl),
+    Enum(EnumDecl),
+    Impl(ImplBlock),
+    Stmt(Stmt),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Program {
+    pub items: Vec<Item>,
+}
