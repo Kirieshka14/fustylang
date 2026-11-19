@@ -93,6 +93,86 @@ impl<'a> Lexer<'a> {
                     }
                 }
 
+                '+' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::PlusAssign
+                    } else {
+                        TokenKind::Plus
+                    }
+                }
+
+                '-' => {
+                    if self.peek() == Some('>') {
+                        self.advance();
+                        TokenKind::Arrow
+                    } else if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::MinusAssign
+                    } else {
+                        TokenKind::Minus
+                    }
+                }
+
+                '*' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::StarAssign
+                    } else {
+                        TokenKind::Star
+                    }
+                }
+
+                '/' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::SlashAssign
+                    } else {
+                        TokenKind::Slash
+                    }
+                }
+
+                '%' => TokenKind::Percent,
+
+                '=' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::Eq
+                    } else if self.peek() == Some('>') {
+                        self.advance();
+                        TokenKind::FatArrow
+                    } else {
+                        TokenKind::Assign
+                    }
+                }
+
+                '!' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::NotEq
+                    } else {
+                        TokenKind::Bang
+                    }
+                }
+
+                '<' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::LtEq
+                    } else {
+                        TokenKind::Lt
+                    }
+                }
+
+                '>' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        TokenKind::GtEq
+                    } else {
+                        TokenKind::Gt
+                    }
+                }
+
 
                 _ => TokenKind::Eof,
             };
