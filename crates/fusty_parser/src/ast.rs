@@ -154,3 +154,54 @@ impl Expr {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    Let {
+        name: String,
+        is_mut: bool,
+        ty: Option<Type>,
+        init: Option<Expr>,
+        span: Span,
+    },
+    Assign {
+        target: Expr,
+        value: Expr,
+        span: Span,
+    },
+    CompoundAssign {
+        target: Expr,
+        op: BinOp,
+        value: Expr,
+        span: Span,
+    },
+    Expr(Expr),
+    Return(Option<Expr>, Span),
+    Break(Span),
+    Continue(Span),
+    Yield(Span),
+    While {
+        cond: Expr,
+        body: Block,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: String,
+    pub is_mut: bool,
+    pub ty: Option<Type>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnDecl {
+    pub name: String,
+    pub is_meow: bool, // `meow fn ...`
+    pub params: Vec<Param>,
+    pub return_ty: Option<Type>,
+    pub body: Block,
+    pub span: Span,
+}
+
