@@ -520,10 +520,247 @@ impl Vm {
                     }
                 }
 
+                Opcode::Jump => {
+                    let offset = self.read_u16(chunk, op_ip)? as usize;
+                    let next_ip = self.ip.saturating_add(offset);
+                    if next_ip > code_len {
+                        return Err(VmError {
+                            message: "Jump target out of bytecode bounds".into(),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    self.ip = next_ip;
+                }
 
-                _ => {}
+                Opcode::JumpIfFalse => {
+                    let offset = self.read_u16(chunk, op_ip)? as usize;
+                    if !self.peek(0, chunk, op_ip)?.is_truthy() {
+                        let next_ip = self.ip.saturating_add(offset);
+                        if next_ip > code_len {
+                            return Err(VmError {
+                                message: "Conditional jump target out of bytecode bounds".into(),
+                                line: line_at(chunk, op_ip),
+                            });
+                        }
+                        self.ip = next_ip;
+                    }
+                }
+
+                Opcode::Loop => {
+                    let offset = self.read_u16(chunk, op_ip)? as usize;
+                    if offset > self.ip {
+                        return Err(VmError {
+                            message: "Invalid loop jump offset".into(),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    self.ip -= offset;
+                }
+
+                Opcode::Wait => {
+                    let duration = match self.pop(chunk, op_ip)? {
+                        Value::Float(f) => f,
+                        Value::Int(i) => i as f64,
+                        other => {
+                            return Err(VmError {
+                                message: format!("Wait expects float/int duration, got {:?}", other),
+                                line: line_at(chunk, op_ip),
+                            })
+                        }
+                    };
+                    if !duration.is_finite() {
+                        return Err(VmError {
+                            message: format!("Wait duration must be finite, got {}", duration),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    return Ok(VmResult::Waiting {
+                        duration_sec: duration.max(0.0),
+                    });
+                }
+
+                Opcode::Yield => {
+                    return Ok(VmResult::Yielded);
+                }
+
+                Opcode::MeowEnter => {
+                    self.meow_depth += 1;
+                    self.meow_mode = true;
+                }
+
+                Opcode::MeowExit => {
+                    self.meow_depth = self.meow_depth.saturating_sub(1);
+                    self.meow_mode = self.meow_depth > 0;
+                }
+
+                Opcode::Call => {
+                    let fn_idx = self.read_u16(chunk, op_ip)? as usize;
+                    let argc = self.read_u8(chunk, op_ip)?;
+                    if self.frames.len() >= Self::MAX_CALL_DEPTH {
+                        return Err(VmError {
+                            message: format!(
+                                "Call stack overflow (max depth {})",
+                                Self::MAX_CALL_DEPTH
+                            ),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    let meta = chunk.functions.get(fn_idx).ok_or_else(|| VmError {
+                        message: format!("Invalid function index {}", fn_idx),
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    if meta.arity != argc {
+                        return Err(VmError {
+                            message: format!(
+                                "Function '{}' expected {} arguments, got {}",
+                                meta.name, meta.arity, argc
+                            ),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    if meta.entry_ip >= code_len {
+                        return Err(VmError {
+                            message: format!("Invalid entry point for function '{}'", meta.name),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    let argc_usize = argc as usize;
+                    if self.stack.len() < argc_usize {
+                        return Err(VmError {
+                            message: "Stack underflow on function call".into(),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    let frame_base = self.stack.len() - argc_usize;
+                    self.frames.push(CallFrame {
+                        return_ip: self.ip,
+                        base_slot: frame_base,
+                        prev_meow_depth: self.meow_depth,
+                    });
+                    base_slot = frame_base;
+                    self.ip = meta.entry_ip;
+                }
+
+                Opcode::CallNative => {
+                    let name_idx = self.read_u16(chunk, op_ip)? as usize;
+                    let argc = self.read_u8(chunk, op_ip)? as usize;
+                    let fn_name = match chunk.constants.get(name_idx) {
+                        Some(Constant::String(s)) => s.as_str(),
+                        _ => {
+                            return Err(VmError {
+                                message: format!("Invalid native function constant {}", name_idx),
+                                line: line_at(chunk, op_ip),
+                            })
+                        }
+                    };
+                    if self.stack.len() < argc {
+                        return Err(VmError {
+                            message: format!(
+                                "Stack underflow calling native function '{}'",
+                                fn_name
+                            ),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    let split_at = self.stack.len() - argc;
+                    let meow = self.meow_mode;
+                    let res = host
+                        .call_native(fn_name, &self.stack[split_at..], meow)
+                        .map_err(|message| VmError {
+                            message,
+                            line: line_at(chunk, op_ip),
+                        })?;
+                    self.stack.truncate(split_at);
+                    self.stack.push(res);
+                }
+
+                Opcode::Return => {
+                    let ret_val = self.stack.pop().unwrap_or(Value::Nil);
+                    if let Some(frame) = self.frames.pop() {
+                        self.stack.truncate(frame.base_slot);
+                        self.ip = frame.return_ip;
+                        self.meow_depth = frame.prev_meow_depth;
+                        self.meow_mode = self.meow_depth > 0;
+                        base_slot = self.frames.last().map(|f| f.base_slot).unwrap_or(0);
+                        self.stack.push(ret_val);
+                    } else {
+                        self.meow_depth = 0;
+                        self.meow_mode = false;
+                        return Ok(VmResult::Done(ret_val));
+                    }
+                }
+
+                Opcode::Halt => {
+                    self.meow_depth = 0;
+                    self.meow_mode = false;
+                    let res = self.stack.pop().unwrap_or(Value::Nil);
+                    return Ok(VmResult::Done(res));
+                }
             }
         }
-        Ok(VmResult::Done(Value::Nil))
+
+        self.meow_depth = 0;
+        self.meow_mode = false;
+        Ok(VmResult::Done(self.stack.pop().unwrap_or(Value::Nil)))
+    }
+
+    #[inline]
+    fn read_u8(&mut self, chunk: &Chunk, op_ip: usize) -> Result<u8, VmError> {
+        let b = chunk.code.get(self.ip).copied().ok_or_else(|| VmError {
+            message: "Unexpected end of bytecode".into(),
+            line: line_at(chunk, op_ip),
+        })?;
+        self.ip += 1;
+        Ok(b)
+    }
+
+    #[inline]
+    fn read_u16(&mut self, chunk: &Chunk, op_ip: usize) -> Result<u16, VmError> {
+        let b1 = self.read_u8(chunk, op_ip)? as u16;
+        let b2 = self.read_u8(chunk, op_ip)? as u16;
+        Ok((b1 << 8) | b2)
+    }
+
+    #[inline]
+    fn pop(&mut self, chunk: &Chunk, op_ip: usize) -> Result<Value, VmError> {
+        self.stack.pop().ok_or_else(|| VmError {
+            message: "Stack underflow".into(),
+            line: line_at(chunk, op_ip),
+        })
+    }
+
+    #[inline]
+    fn peek(&self, distance: usize, chunk: &Chunk, op_ip: usize) -> Result<&Value, VmError> {
+        if distance >= self.stack.len() {
+            return Err(VmError {
+                message: "Stack underflow on peek".into(),
+                line: line_at(chunk, op_ip),
+            });
+        }
+        let idx = self.stack.len() - 1 - distance;
+        Ok(&self.stack[idx])
+    }
+
+    #[inline]
+    fn pop_f32(&mut self, chunk: &Chunk, op_ip: usize) -> Result<f32, VmError> {
+        match self.pop(chunk, op_ip)? {
+            Value::Float(f) => Ok(f as f32),
+            Value::Int(i) => Ok(i as f32),
+            other => Err(VmError {
+                message: format!("Expected number, got {:?}", other),
+                line: line_at(chunk, op_ip),
+            }),
+        }
+    }
+
+    #[inline]
+    fn pop_vec2(&mut self, chunk: &Chunk, op_ip: usize) -> Result<Vec2, VmError> {
+        match self.pop(chunk, op_ip)? {
+            Value::V2(v) => Ok(v),
+            other => Err(VmError {
+                message: format!("Expected vec2, got {:?}", other),
+                line: line_at(chunk, op_ip),
+            }),
+        }
     }
 }
