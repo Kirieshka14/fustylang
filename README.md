@@ -18,3 +18,44 @@
 | `crates/fusty_bytecode` | 3-pass bytecode compiler with forward function resolution, immutability checks (`let` vs `let mut`), loop stack unwinding, and vector intrinsics |
 | `crates/fusty_vm` | Stack-based bytecode Virtual Machine with `CallFrame` management, `Host` FFI trait, `FrameArena`, and coroutine suspension (`VmResult::Waiting` / `Yielded`) |
 | `crates/fusty_cli` | Standalone CLI compiler and runner (`fusty run <script.fy>`) |
+
+## Quick Start
+
+```bash
+# Run the built-in FustyLang combat & coroutine demo
+cargo run -p fusty_cli
+
+# Run a FustyLang (.fy) script file
+cargo run -p fusty_cli -- run examples/boss_fight.fy
+
+# Run all unit tests across lexer, parser, bytecode compiler, and VM
+cargo test
+```
+
+## Example Script (`.fy`)
+
+```rust
+let spin_speed = 1.6;
+let bob_amp = 0.25;
+
+fn compute_offset(t: f64) -> vec3 {
+    let mut p = vec3(0.0, 0.0, 0.0);
+    p.y = abs(sin(t * 2.0)) * bob_amp;
+    return p;
+}
+
+let mut pos = vec2(100.0, 50.0);
+let target = vec2(300.0, 200.0);
+let dir = (target - pos).normalized();
+pos += dir * 250.0 * 0.016;
+
+wait 0.25;
+
+meow {
+    let fast_val = 1337;
+    log("meow fast_val =", fast_val);
+}
+
+let offset3 = compute_offset(1.5);
+log("pos =", pos, "offset3 =", offset3);
+```
