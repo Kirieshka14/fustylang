@@ -1,0 +1,8 @@
+[package]
+name = "fusty_bytecode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fusty_lexer = { path = "../fusty_lexer" }
+fusty_parser = { path = "../fusty_parser" }
