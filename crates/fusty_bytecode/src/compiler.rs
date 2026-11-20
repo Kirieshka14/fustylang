@@ -596,4 +596,95 @@ impl Compiler {
         Ok(())
     }
 
+    pub fn compile_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
+        let line = expr.span().line;
+        match expr {
+            Expr::Literal(lit, _) => self.compile_literal(lit, line)?,
+
+            Expr::Ident(name, _) => {
+                match self.resolve_var(name) {
+                    Some(VarBinding::Local { slot, .. }) => {
+                        self.chunk.write_op(Opcode::GetLocal, line);
+                        self.chunk.write_u16(slot, line);
+                    }
+                    Some(VarBinding::Global { slot, .. }) => {
+                        self.chunk.write_op(Opcode::GetGlobal, line);
+                        self.chunk.write_u16(slot, line);
+                    }
+                    None => {
+                        return Err(CompileError {
+                            message: format!("Undefined variable '{}'", name),
+                        });
+                    }
+                }
+            }
+
+            Expr::Vec2 { x, y, .. } => {
+                self.compile_expr(x)?;
+                self.compile_expr(y)?;
+                self.chunk.write_op(Opcode::MakeVec2, line);
+            }
+
+            Expr::Vec3 { x, y, z, .. } => {
+                self.compile_expr(x)?;
+                self.compile_expr(y)?;
+                self.compile_expr(z)?;
+                self.chunk.write_op(Opcode::MakeVec3, line);
+            }
+
+            Expr::Binary {
+                left, op, right, ..
+            } => match op {
+                BinOp::And => {
+                    self.compile_expr(left)?;
+                    self.chunk.write_op(Opcode::JumpIfFalse, line);
+                    let end_jump = self.emit_jump_placeholder(line);
+                    self.chunk.write_op(Opcode::Pop, line);
+                    self.compile_expr(right)?;
+                    self.patch_jump(end_jump)?;
+                }
+                BinOp::Or => {
+                    self.compile_expr(left)?;
+                    self.chunk.write_op(Opcode::JumpIfFalse, line);
+                    let rhs_jump = self.emit_jump_placeholder(line);
+                    self.chunk.write_op(Opcode::Jump, line);
+                    let end_jump = self.emit_jump_placeholder(line);
+                    self.patch_jump(rhs_jump)?;
+                    self.chunk.write_op(Opcode::Pop, line);
+                    self.compile_expr(right)?;
+                    self.patch_jump(end_jump)?;
+                }
+                _ => {
+                    self.compile_expr(left)?;
+                    self.compile_expr(right)?;
+                    match op {
+                        BinOp::Add => self.chunk.write_op(Opcode::Add, line),
+                        BinOp::Sub => self.chunk.write_op(Opcode::Sub, line),
+                        BinOp::Mul => self.chunk.write_op(Opcode::Mul, line),
+                        BinOp::Div => self.chunk.write_op(Opcode::Div, line),
+                        BinOp::Mod => self.chunk.write_op(Opcode::Mod, line),
+                        BinOp::Eq => self.chunk.write_op(Opcode::Eq, line),
+                        BinOp::NotEq => self.chunk.write_op(Opcode::NotEq, line),
+                        BinOp::Lt => self.chunk.write_op(Opcode::Lt, line),
+                        BinOp::LtEq => self.chunk.write_op(Opcode::LtEq, line),
+                        BinOp::Gt => self.chunk.write_op(Opcode::Gt, line),
+                        BinOp::GtEq => self.chunk.write_op(Opcode::GtEq, line),
+                        BinOp::And | BinOp::Or => unreachable!(),
+                    }
+                }
+            },
+
+            Expr::Unary { op, expr, .. } => {
+                self.compile_expr(expr)?;
+                match op {
+                    UnOp::Neg => self.chunk.write_op(Opcode::Neg, line),
+                    UnOp::Not => self.chunk.write_op(Opcode::Not, line),
+                }
+            }
+
+
+            _ => {}
+        }
+        Ok(())
+    }
 }
