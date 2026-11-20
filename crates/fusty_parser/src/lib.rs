@@ -330,5 +330,71 @@ impl Parser {
         }
     }
 
+    pub fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        match self.peek_kind() {
+            TokenKind::Let => self.parse_let_stmt(),
+            TokenKind::Return => self.parse_return_stmt(),
+            TokenKind::Break => self.parse_break_stmt(),
+            TokenKind::Continue => self.parse_continue_stmt(),
+            TokenKind::Yield => self.parse_yield_stmt(),
+            TokenKind::While => self.parse_while_stmt(),
+            TokenKind::Wait => self.parse_wait_stmt(),
+            _ => {
+                let expr = self.parse_expr()?;
+                self.finish_expr_or_assign_stmt(expr)
+            }
+        }
+    }
+
+    fn finish_expr_or_assign_stmt(&mut self, expr: Expr) -> Result<Stmt, ParseError> {
+        // Check for assignment: target = val; or target += val;
+        let assign_op = if self.match_token(&TokenKind::Assign) {
+            Some(None)
+        } else if self.match_token(&TokenKind::PlusAssign) {
+            Some(Some(BinOp::Add))
+        } else if self.match_token(&TokenKind::MinusAssign) {
+            Some(Some(BinOp::Sub))
+        } else if self.match_token(&TokenKind::StarAssign) {
+            Some(Some(BinOp::Mul))
+        } else if self.match_token(&TokenKind::SlashAssign) {
+            Some(Some(BinOp::Div))
+        } else {
+            None
+        };
+
+        if let Some(compound_op) = assign_op {
+            let val = self.parse_expr()?;
+            let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+            let span = Span::new(expr.span().start, end.end, expr.span().line, expr.span().col);
+
+            if let Some(op) = compound_op {
+                Ok(Stmt::CompoundAssign { target: expr, op, value: val, span })
+            } else {
+                Ok(Stmt::Assign { target: expr, value: val, span })
+            }
+        } else {
+            self.match_token(&TokenKind::Semicolon);
+            Ok(Stmt::Expr(expr))
+        }
+    }
+
+    fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::Break, "'break'")?.span;
+        let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+        Ok(Stmt::Break(Span::new(start.start, end.end, start.line, start.col)))
+    }
+
+    fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::Continue, "'continue'")?.span;
+        let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+        Ok(Stmt::Continue(Span::new(start.start, end.end, start.line, start.col)))
+    }
+
+    fn parse_yield_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::Yield, "'yield'")?.span;
+        let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+        Ok(Stmt::Yield(Span::new(start.start, end.end, start.line, start.col)))
+    }
+
 
 }
