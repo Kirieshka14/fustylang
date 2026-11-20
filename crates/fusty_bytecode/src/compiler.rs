@@ -251,5 +251,148 @@ impl Compiler {
         Ok(())
     }
 
+    pub fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
+        match stmt {
+            Stmt::Let {
+                name,
+                is_mut,
+                init,
+                span,
+                ..
+            } => {
+                let line = span.line;
+                if let Some(init_expr) = init {
+                    self.compile_expr(init_expr)?;
+                } else {
+                    self.chunk.write_op(Opcode::Nil, line);
+                }
 
+                if self.scope_depth == 0 {
+                    // Top-level binding stored in globals table so functions can access it.
+                    if self.globals.len() >= u16::MAX as usize {
+                        return Err(CompileError {
+                            message: "Too many global variables (max 65535)".into(),
+                        });
+                    }
+                    let slot = self.globals.len() as u16;
+                    self.globals.push(Global {
+                        name: name.clone(),
+                        slot,
+                        is_mut: *is_mut,
+                    });
+                    self.chunk.write_op(Opcode::SetGlobal, line);
+                    self.chunk.write_u16(slot, line);
+                    self.chunk.write_op(Opcode::Pop, line);
+                } else {
+                    if self.locals.len() >= u16::MAX as usize {
+                        return Err(CompileError {
+                            message: "Too many local variables (max 65535)".into(),
+                        });
+                    }
+                    self.locals.push(Local {
+                        name: name.clone(),
+                        depth: self.scope_depth,
+                        is_mut: *is_mut,
+                    });
+                }
+            }
+
+            Stmt::Assign { target, value, span } => {
+                let line = span.line;
+                match target {
+                    Expr::Ident(name, _) => {
+                        let binding = self.resolve_var(name).ok_or_else(|| CompileError {
+                            message: format!("Undefined variable '{}' in assignment", name),
+                        })?;
+                        match binding {
+                            VarBinding::Local { slot, is_mut } => {
+                                if !is_mut {
+                                    return Err(CompileError {
+                                        message: format!(
+                                            "Cannot assign twice to immutable variable '{}' (use `let mut`)",
+                                            name
+                                        ),
+                                    });
+                                }
+                                self.compile_expr(value)?;
+                                self.chunk.write_op(Opcode::SetLocal, line);
+                                self.chunk.write_u16(slot, line);
+                                self.chunk.write_op(Opcode::Pop, line);
+                            }
+                            VarBinding::Global { slot, is_mut } => {
+                                if !is_mut {
+                                    return Err(CompileError {
+                                        message: format!(
+                                            "Cannot assign twice to immutable variable '{}' (use `let mut`)",
+                                            name
+                                        ),
+                                    });
+                                }
+                                self.compile_expr(value)?;
+                                self.chunk.write_op(Opcode::SetGlobal, line);
+                                self.chunk.write_u16(slot, line);
+                                self.chunk.write_op(Opcode::Pop, line);
+                            }
+                        }
+                    }
+                    Expr::FieldAccess {
+                        target: inner,
+                        field,
+                        ..
+                    } => {
+                        let Expr::Ident(name, _) = inner.as_ref() else {
+                            return Err(CompileError {
+                                message: "Field assignment target must be a variable (e.g. `v.x = ...`)"
+                                    .into(),
+                            });
+                        };
+                        let set_op = match field.as_str() {
+                            "x" => Opcode::VecSetX,
+                            "y" => Opcode::VecSetY,
+                            "z" => Opcode::VecSetZ,
+                            other => {
+                                return Err(CompileError {
+                                    message: format!("Cannot assign to unknown field '{}'", other),
+                                })
+                            }
+                        };
+                        let binding = self.resolve_var(name).ok_or_else(|| CompileError {
+                            message: format!("Undefined variable '{}' in field assignment", name),
+                        })?;
+                        let (get_op, store_op, slot, is_mut) = match binding {
+                            VarBinding::Local { slot, is_mut } => {
+                                (Opcode::GetLocal, Opcode::SetLocal, slot, is_mut)
+                            }
+                            VarBinding::Global { slot, is_mut } => {
+                                (Opcode::GetGlobal, Opcode::SetGlobal, slot, is_mut)
+                            }
+                        };
+                        if !is_mut {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Cannot mutate field '{}' of immutable variable '{}' (use `let mut`)",
+                                    field, name
+                                ),
+                            });
+                        }
+                        self.chunk.write_op(get_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.compile_expr(value)?;
+                        self.chunk.write_op(set_op, line);
+                        self.chunk.write_op(store_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.chunk.write_op(Opcode::Pop, line);
+                    }
+                    _ => {
+                        return Err(CompileError {
+                            message: "Assignment target must be a variable or vector field".into(),
+                        });
+                    }
+                }
+            }
+
+            _ => {}
+        }
+        Ok(())
+    }
 }
