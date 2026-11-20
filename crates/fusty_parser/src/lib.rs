@@ -734,4 +734,85 @@ impl Parser {
         Ok(expr)
     }
 
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        let tok = self.advance();
+        match tok.kind {
+            TokenKind::IntLit(val) => Ok(Expr::Literal(Literal::Int(val), tok.span)),
+            TokenKind::FloatLit(val) => Ok(Expr::Literal(Literal::Float(val), tok.span)),
+            TokenKind::StringLit(val) => Ok(Expr::Literal(Literal::String(val), tok.span)),
+            TokenKind::True => Ok(Expr::Literal(Literal::Bool(true), tok.span)),
+            TokenKind::False => Ok(Expr::Literal(Literal::Bool(false), tok.span)),
+            TokenKind::Ident(s) => Ok(Expr::Ident(s, tok.span)),
+            TokenKind::SelfValue => Ok(Expr::Ident("self".to_string(), tok.span)),
+
+            TokenKind::Vec2 => {
+                self.expect(&TokenKind::LParen, "'('")?;
+                let x = self.parse_expr()?;
+                self.expect(&TokenKind::Comma, "','")?;
+                let y = self.parse_expr()?;
+                let end = self.expect(&TokenKind::RParen, "')'")?.span;
+                let span = Span::new(tok.span.start, end.end, tok.span.line, tok.span.col);
+                Ok(Expr::Vec2 {
+                    x: Box::new(x),
+                    y: Box::new(y),
+                    span,
+                })
+            }
+
+            TokenKind::Vec3 => {
+                self.expect(&TokenKind::LParen, "'('")?;
+                let x = self.parse_expr()?;
+                self.expect(&TokenKind::Comma, "','")?;
+                let y = self.parse_expr()?;
+                self.expect(&TokenKind::Comma, "','")?;
+                let z = self.parse_expr()?;
+                let end = self.expect(&TokenKind::RParen, "')'")?.span;
+                let span = Span::new(tok.span.start, end.end, tok.span.line, tok.span.col);
+                Ok(Expr::Vec3 {
+                    x: Box::new(x),
+                    y: Box::new(y),
+                    z: Box::new(z),
+                    span,
+                })
+            }
+
+            TokenKind::Meow => {
+                // `meow { ... }` block!
+                let block = self.parse_block()?;
+                let span = Span::new(tok.span.start, block.span.end, tok.span.line, tok.span.col);
+                Ok(Expr::MeowBlock { block, span })
+            }
+
+            TokenKind::If => {
+                let cond = self.parse_expr()?;
+                let then_branch = self.parse_block()?;
+                let else_branch = if self.match_token(&TokenKind::Else) {
+                    if self.check(&TokenKind::If) {
+                        let elif_expr = self.parse_primary()?;
+                        let elif_span = elif_expr.span();
+                        Some(Block {
+                            stmts: Vec::new(),
+                            expr: Some(Box::new(elif_expr)),
+                            span: elif_span,
+                        })
+                    } else {
+                        Some(self.parse_block()?)
+                    }
+                } else {
+                    None
+                };
+                let end_span = else_branch.as_ref().map(|b| b.span).unwrap_or(then_branch.span);
+                let span = Span::new(tok.span.start, end_span.end, tok.span.line, tok.span.col);
+                Ok(Expr::If {
+                    cond: Box::new(cond),
+                    then_branch,
+                    else_branch,
+                    span,
+                })
+            }
+
+
+            _ => unreachable!(),
+        }
+    }
 }
