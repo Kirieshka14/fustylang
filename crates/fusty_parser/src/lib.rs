@@ -918,3 +918,42 @@ impl Parser {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fusty_lexer::Lexer;
+
+    #[test]
+    fn test_parse_boss_fight() {
+        let code = r#"
+            enum BossState {
+                Idle,
+                Attack,
+            }
+
+            struct Boss {
+                hp: i32,
+                pos: vec2,
+            }
+
+            fn update_boss(mut self, dt: f32) {
+                let move_vec = vec2(10.0, 20.0);
+                self.pos += move_vec * dt;
+
+                wait 0.25;
+
+                meow {
+                    let raw = 1337;
+                }
+            }
+        "#;
+
+        let mut lexer = Lexer::new(code);
+        let tokens = lexer.tokenize().expect("Lex failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse_program().expect("Parse failed");
+
+        assert_eq!(program.items.len(), 3); // Enum, Struct, Fn
+    }
+}
