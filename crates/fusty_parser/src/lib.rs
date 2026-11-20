@@ -468,5 +468,52 @@ impl Parser {
         }))
     }
 
+    pub fn parse_block(&mut self) -> Result<Block, ParseError> {
+        let start = self.expect(&TokenKind::LBrace, "'{'")?.span;
+        let mut stmts = Vec::new();
+        let mut final_expr = None;
+
+        while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
+            match self.peek_kind() {
+                TokenKind::Let
+                | TokenKind::Return
+                | TokenKind::Break
+                | TokenKind::Continue
+                | TokenKind::Yield
+                | TokenKind::While
+                | TokenKind::Wait => {
+                    stmts.push(self.parse_stmt()?);
+                }
+                _ => {
+                    let expr = self.parse_expr()?;
+                    let is_assign = matches!(
+                        self.peek_kind(),
+                        TokenKind::Assign
+                            | TokenKind::PlusAssign
+                            | TokenKind::MinusAssign
+                            | TokenKind::StarAssign
+                            | TokenKind::SlashAssign
+                    );
+                    if is_assign {
+                        stmts.push(self.finish_expr_or_assign_stmt(expr)?);
+                    } else if self.match_token(&TokenKind::Semicolon) {
+                        stmts.push(Stmt::Expr(expr));
+                    } else if self.check(&TokenKind::RBrace) {
+                        final_expr = Some(Box::new(expr));
+                        break;
+                    } else {
+                        stmts.push(Stmt::Expr(expr));
+                    }
+                }
+            }
+        }
+
+        let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
+        Ok(Block {
+            stmts,
+            expr: final_expr,
+            span: Span::new(start.start, end.end, start.line, start.col),
+        })
+    }
 
 }
