@@ -172,5 +172,109 @@ impl Parser {
         })
     }
 
+    fn parse_struct(&mut self) -> Result<StructDecl, ParseError> {
+        let start = self.expect(&TokenKind::Struct, "'struct'")?.span;
+        let name = match self.advance().kind {
+            TokenKind::Ident(s) => s,
+            _ => {
+                return Err(ParseError {
+                    message: "Expected struct name".into(),
+                    span: start,
+                })
+            }
+        };
+
+        self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut fields = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
+            let mut is_mut = false;
+            if self.match_token(&TokenKind::Mut) {
+                is_mut = true;
+            }
+            let field_tok = self.advance();
+            let field_name = match field_tok.kind {
+                TokenKind::Ident(s) => s,
+                _ => {
+                    return Err(ParseError {
+                        message: "Expected field name".into(),
+                        span: field_tok.span,
+                    })
+                }
+            };
+
+            self.expect(&TokenKind::Colon, "':'")?;
+            let ty = self.parse_type()?;
+            fields.push(StructField {
+                name: field_name,
+                is_mut,
+                ty,
+                span: field_tok.span,
+            });
+
+            self.match_token(&TokenKind::Comma);
+        }
+        let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
+
+        Ok(StructDecl {
+            name,
+            fields,
+            span: Span::new(start.start, end.end, start.line, start.col),
+        })
+    }
+
+    fn parse_enum(&mut self) -> Result<EnumDecl, ParseError> {
+        let start = self.expect(&TokenKind::Enum, "'enum'")?.span;
+        let name = match self.advance().kind {
+            TokenKind::Ident(s) => s,
+            _ => {
+                return Err(ParseError {
+                    message: "Expected enum name".into(),
+                    span: start,
+                })
+            }
+        };
+
+        self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut variants = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
+            let var_tok = self.advance();
+            let var_name = match var_tok.kind {
+                TokenKind::Ident(s) => s,
+                _ => {
+                    return Err(ParseError {
+                        message: "Expected enum variant name".into(),
+                        span: var_tok.span,
+                    })
+                }
+            };
+
+            let mut fields = Vec::new();
+            if self.match_token(&TokenKind::LParen) {
+                while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                    fields.push(self.parse_type()?);
+                    if !self.match_token(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                self.expect(&TokenKind::RParen, "')'")?;
+            }
+
+            variants.push(EnumVariant {
+                name: var_name,
+                fields,
+                span: var_tok.span,
+            });
+
+            self.match_token(&TokenKind::Comma);
+        }
+        let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
+
+        Ok(EnumDecl {
+            name,
+            variants,
+            span: Span::new(start.start, end.end, start.line, start.col),
+        })
+    }
+
 
 }
