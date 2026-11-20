@@ -860,9 +860,131 @@ impl Compiler {
                 self.compile_block_value(b)?;
             }
 
+            Expr::Match { value, arms, span } => {
+                self.begin_scope();
+                self.compile_expr(value)?;
+                let match_slot = self.locals.len() as u16;
+                self.locals.push(Local {
+                    name: String::new(), // hidden anonymous match scrutinee
+                    depth: self.scope_depth,
+                    is_mut: false,
+                });
 
-            _ => {}
+                let mut end_jumps = Vec::with_capacity(arms.len());
+                let mut has_catchall = false;
+
+                for arm in arms {
+                    let arm_line = arm.span.line;
+                    match &arm.pattern {
+                        Pattern::Wildcard => {
+                            self.compile_expr(&arm.body)?;
+                            self.chunk.write_op(Opcode::Jump, arm_line);
+                            end_jumps.push(self.emit_jump_placeholder(arm_line));
+                            has_catchall = true;
+                            break;
+                        }
+                        Pattern::Ident(binding) => {
+                            self.begin_scope();
+                            self.chunk.write_op(Opcode::GetLocal, arm_line);
+                            self.chunk.write_u16(match_slot, arm_line);
+                            self.locals.push(Local {
+                                name: binding.clone(),
+                                depth: self.scope_depth,
+                                is_mut: false,
+                            });
+                            self.compile_expr(&arm.body)?;
+                            self.end_scope_keeping_top(arm_line)?;
+                            self.chunk.write_op(Opcode::Jump, arm_line);
+                            end_jumps.push(self.emit_jump_placeholder(arm_line));
+                            has_catchall = true;
+                            break;
+                        }
+                        Pattern::Literal(lit) => {
+                            self.chunk.write_op(Opcode::GetLocal, arm_line);
+                            self.chunk.write_u16(match_slot, arm_line);
+                            self.compile_literal(lit, arm_line)?;
+                            self.chunk.write_op(Opcode::Eq, arm_line);
+                            self.chunk.write_op(Opcode::JumpIfFalse, arm_line);
+                            let next_arm = self.emit_jump_placeholder(arm_line);
+                            self.chunk.write_op(Opcode::Pop, arm_line);
+                            self.compile_expr(&arm.body)?;
+                            self.chunk.write_op(Opcode::Jump, arm_line);
+                            end_jumps.push(self.emit_jump_placeholder(arm_line));
+                            self.patch_jump(next_arm)?;
+                            self.chunk.write_op(Opcode::Pop, arm_line);
+                        }
+                        Pattern::Variant { variant_name, .. } => {
+                            self.chunk.write_op(Opcode::GetLocal, arm_line);
+                            self.chunk.write_u16(match_slot, arm_line);
+                            self.emit_const(Constant::String(variant_name.clone()), arm_line)?;
+                            self.chunk.write_op(Opcode::Eq, arm_line);
+                            self.chunk.write_op(Opcode::JumpIfFalse, arm_line);
+                            let next_arm = self.emit_jump_placeholder(arm_line);
+                            self.chunk.write_op(Opcode::Pop, arm_line);
+                            self.compile_expr(&arm.body)?;
+                            self.chunk.write_op(Opcode::Jump, arm_line);
+                            end_jumps.push(self.emit_jump_placeholder(arm_line));
+                            self.patch_jump(next_arm)?;
+                            self.chunk.write_op(Opcode::Pop, arm_line);
+                        }
+                    }
+                }
+
+                if !has_catchall {
+                    self.chunk.write_op(Opcode::Nil, span.line);
+                }
+                for j in end_jumps {
+                    self.patch_jump(j)?;
+                }
+                self.end_scope_keeping_top(span.line)?;
+            }
         }
+        Ok(())
+    }
+
+    fn compile_literal(&mut self, lit: &Literal, line: usize) -> Result<(), CompileError> {
+        match lit {
+            Literal::Int(i) => self.emit_const(Constant::Int(*i), line)?,
+            Literal::Float(f) => self.emit_const(Constant::Float(*f), line)?,
+            Literal::Bool(b) => {
+                if *b {
+                    self.chunk.write_op(Opcode::True, line);
+                } else {
+                    self.chunk.write_op(Opcode::False, line);
+                }
+            }
+            Literal::String(s) => self.emit_const(Constant::String(s.clone()), line)?,
+        }
+        Ok(())
+    }
+
+    fn emit_jump_placeholder(&mut self, line: usize) -> usize {
+        self.chunk.write_byte(0xFF, line);
+        self.chunk.write_byte(0xFF, line);
+        self.chunk.code.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) -> Result<(), CompileError> {
+        let jump = self.chunk.code.len() - offset - 2;
+        if jump > u16::MAX as usize {
+            return Err(CompileError {
+                message: "Jump offset exceeds 65535 bytes".into(),
+            });
+        }
+        self.chunk.code[offset] = (jump >> 8) as u8;
+        self.chunk.code[offset + 1] = (jump & 0xFF) as u8;
+        Ok(())
+    }
+
+    fn emit_loop(&mut self, loop_start: usize, line: usize) -> Result<(), CompileError> {
+        self.chunk.write_op(Opcode::Loop, line);
+        let offset = self.chunk.code.len() - loop_start + 2;
+        if offset > u16::MAX as usize {
+            return Err(CompileError {
+                message: "Loop body exceeds 65535 bytes".into(),
+            });
+        }
+        self.chunk.write_u16(offset as u16, line);
         Ok(())
     }
 }
