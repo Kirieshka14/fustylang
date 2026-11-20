@@ -160,5 +160,50 @@ mod tests {
         assert!(err.message.contains("budget exceeded"));
     }
 
+    #[test]
+    fn test_globals_accessible_inside_functions() {
+        let src = r#"
+            let speed = 4.0;
+            let mut counter = 0;
+
+            fn bump(v: f64) -> f64 {
+                counter += 1;
+                v * speed
+            }
+
+            let r = bump(3.0);
+            return r + counter;
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Float(13.0)));
+    }
+
+    #[test]
+    fn test_immutability_enforced() {
+        let tokens = Lexer::new("let x = 5; x = 10;").tokenize().unwrap();
+        let program = Parser::new(tokens).parse_program().unwrap();
+        let err = Compiler::new().compile_program(&program).unwrap_err();
+        assert!(err.message.contains("immutable"));
+    }
+
+    #[test]
+    fn test_nested_meow_does_not_exit_early() {
+        let src = r#"
+            meow {
+                meow {
+                    let a = 1;
+                }
+                raw_teleport(vec2(1.0, 2.0));
+            }
+        "#;
+        let chunk = compile_src(src);
+        let mut host = MockHost { teleports: 0 };
+        let mut vm = Vm::new();
+        vm.run_with_host(&chunk, &mut host).unwrap();
+        assert_eq!(host.teleports, 1);
+        assert!(!vm.meow_mode);
+    }
+
 
 }
