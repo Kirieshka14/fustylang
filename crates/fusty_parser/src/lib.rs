@@ -276,5 +276,59 @@ impl Parser {
         })
     }
 
+    fn parse_impl(&mut self) -> Result<ImplBlock, ParseError> {
+        let start = self.expect(&TokenKind::Impl, "'impl'")?.span;
+        let target = match self.advance().kind {
+            TokenKind::Ident(s) => s,
+            _ => {
+                return Err(ParseError {
+                    message: "Expected type name for impl".into(),
+                    span: start,
+                })
+            }
+        };
+
+        self.expect(&TokenKind::LBrace, "'{'")?;
+        let mut methods = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
+            if self.check(&TokenKind::Meow) && self.peek_next_kind() == Some(&TokenKind::Fn) {
+                self.advance();
+                let mut func = self.parse_fn()?;
+                func.is_meow = true;
+                methods.push(func);
+            } else {
+                methods.push(self.parse_fn()?);
+            }
+        }
+        let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
+
+        Ok(ImplBlock {
+            target,
+            methods,
+            span: Span::new(start.start, end.end, start.line, start.col),
+        })
+    }
+
+    fn parse_type(&mut self) -> Result<Type, ParseError> {
+        let tok = self.advance();
+        match tok.kind {
+            TokenKind::Vec2 => Ok(Type::Vec2),
+            TokenKind::Vec3 => Ok(Type::Vec3),
+            TokenKind::Ident(ref s) => match s.as_str() {
+                "i32" => Ok(Type::I32),
+                "i64" => Ok(Type::I64),
+                "f32" => Ok(Type::F32),
+                "f64" => Ok(Type::F64),
+                "bool" => Ok(Type::Bool),
+                "string" => Ok(Type::String),
+                other => Ok(Type::Custom(other.to_string())),
+            },
+            _ => Err(ParseError {
+                message: format!("Expected type, found {:?}", tok.kind),
+                span: tok.span,
+            }),
+        }
+    }
+
 
 }
