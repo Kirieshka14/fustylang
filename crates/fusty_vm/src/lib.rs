@@ -205,5 +205,98 @@ mod tests {
         assert!(!vm.meow_mode);
     }
 
+    #[test]
+    fn test_if_else_if_block_and_match_expressions() {
+        let src = r#"
+            fn classify(n: i32) -> i32 {
+                let base = if n < 0 {
+                    -10
+                } else if n == 0 {
+                    0
+                } else {
+                    let tmp = n * 2;
+                    tmp + 1
+                };
+                match base {
+                    -10 => 100,
+                    0 => 200,
+                    v => v + 5,
+                }
+            }
+            return classify(-1) + classify(0) + classify(4);
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        // classify(-1)=100, classify(0)=200, classify(4)=9+5=14 -> 314
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Int(314)));
+    }
 
+    #[test]
+    fn test_break_continue_and_yield() {
+        let src = r#"
+            let mut sum = 0;
+            let mut i = 0;
+            while i < 10 {
+                i += 1;
+                if i == 3 {
+                    continue;
+                }
+                if i == 6 {
+                    break;
+                }
+                sum += i;
+                if i == 2 {
+                    yield;
+                }
+            }
+            return sum;
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Yielded);
+        // sum of 1, 2, 4, 5 = 12
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Int(12)));
+    }
+
+    #[test]
+    fn test_vector_field_assign_and_cross_and_div_zero() {
+        let src = r#"
+            let mut v = vec3(1.0, 0.0, 0.0);
+            v.y += 2.0;
+            v.z = 3.0;
+            let c = vec3(1.0, 0.0, 0.0).cross(vec3(0.0, 1.0, 0.0));
+            return v + c;
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        assert_eq!(
+            vm.run(&chunk).unwrap(),
+            VmResult::Done(Value::V3(Vec3::new(1.0, 2.0, 4.0)))
+        );
+
+        let div_zero = compile_src("let v = vec2(1.0, 2.0) / 0.0;");
+        let mut vm2 = Vm::new();
+        assert!(vm2.run(&div_zero).is_err());
+
+        let mod_zero = compile_src("let x = 5.0 % 0.0;");
+        let mut vm3 = Vm::new();
+        assert!(vm3.run(&mod_zero).is_err());
+    }
+
+    #[test]
+    fn test_call_stack_overflow_and_lexer_unterminated_comment() {
+        let rec = compile_src("fn boom() { boom(); } boom();");
+        let mut vm = Vm::new();
+        let err = vm.run(&rec).unwrap_err();
+        assert!(err.message.contains("Call stack overflow"));
+
+        let lex_err = Lexer::new("let a = 1; /* unterminated").tokenize();
+        assert!(lex_err.is_err());
+
+        let mut arena = super::arena::FrameArena::new(64);
+        assert!(arena.alloc_bytes(8, 0).is_none());
+        assert!(arena.alloc_bytes(8, 3).is_none());
+        let ptr = arena.alloc_bytes(16, 8).unwrap();
+        assert_eq!(ptr as usize % 8, 0);
+    }
 }
