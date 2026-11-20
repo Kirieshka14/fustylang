@@ -64,5 +64,62 @@ impl Compiler {
         }
     }
 
+    pub fn compile_program(mut self, program: &Program) -> Result<Chunk, CompileError> {
+        let mut fn_decls: Vec<&FnDecl> = Vec::new();
+
+        // Pass 1: Register all function signatures so forward/recursive calls resolve.
+        for item in &program.items {
+            if let Item::Fn(fn_decl) = item {
+                if self.fn_indices.contains_key(&fn_decl.name) {
+                    return Err(CompileError {
+                        message: format!("Duplicate function definition '{}'", fn_decl.name),
+                    });
+                }
+                let idx = self.chunk.functions.len();
+                if idx > u16::MAX as usize {
+                    return Err(CompileError {
+                        message: "Too many functions in chunk".into(),
+                    });
+                }
+                if fn_decl.params.len() > u8::MAX as usize {
+                    return Err(CompileError {
+                        message: format!(
+                            "Function '{}' has too many parameters (max 255)",
+                            fn_decl.name
+                        ),
+                    });
+                }
+                let arity = fn_decl.params.len() as u8;
+                self.fn_indices.insert(fn_decl.name.clone(), idx as u16);
+                self.fn_arities.insert(fn_decl.name.clone(), arity);
+                self.chunk.functions.push(FunctionMeta {
+                    name: fn_decl.name.clone(),
+                    entry_ip: 0,
+                    arity,
+                    is_meow: fn_decl.is_meow,
+                });
+                fn_decls.push(fn_decl);
+            }
+        }
+
+        // Pass 2: Compile top-level statements (top-level `let` populates globals) and halt before function bodies.
+        for item in &program.items {
+            match item {
+                Item::Stmt(stmt) => self.compile_stmt(stmt)?,
+                Item::Fn(_) | Item::Struct(_) | Item::Enum(_) | Item::Impl(_) => {}
+            }
+        }
+        self.chunk.write_op(Opcode::Halt, 0);
+
+        // Pass 3: Compile each function body in isolation (with read/write access to globals).
+        for (idx, fn_decl) in fn_decls.iter().enumerate() {
+            self.chunk.functions[idx].entry_ip = self.chunk.code.len();
+            self.compile_fn(fn_decl)?;
+        }
+
+        self.chunk.global_count = self.globals.len() as u16;
+        Ok(self.chunk)
+    }
+
 
 }
