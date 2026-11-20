@@ -598,5 +598,75 @@ impl Parser {
         Ok(left)
     }
 
+    fn parse_term(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_factor()?;
+        loop {
+            let op = if self.match_token(&TokenKind::Plus) {
+                BinOp::Add
+            } else if self.match_token(&TokenKind::Minus) {
+                BinOp::Sub
+            } else {
+                break;
+            };
+            let right = self.parse_factor()?;
+            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            left = Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_factor(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_unary()?;
+        loop {
+            let op = if self.match_token(&TokenKind::Star) {
+                BinOp::Mul
+            } else if self.match_token(&TokenKind::Slash) {
+                BinOp::Div
+            } else if self.match_token(&TokenKind::Percent) {
+                BinOp::Mod
+            } else {
+                break;
+            };
+            let right = self.parse_unary()?;
+            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            left = Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
+        if self.check(&TokenKind::Bang) {
+            let start = self.advance().span;
+            let expr = self.parse_unary()?;
+            let span = Span::new(start.start, expr.span().end, start.line, start.col);
+            return Ok(Expr::Unary {
+                op: UnOp::Not,
+                expr: Box::new(expr),
+                span,
+            });
+        }
+        if self.check(&TokenKind::Minus) {
+            let start = self.advance().span;
+            let expr = self.parse_unary()?;
+            let span = Span::new(start.start, expr.span().end, start.line, start.col);
+            return Ok(Expr::Unary {
+                op: UnOp::Neg,
+                expr: Box::new(expr),
+                span,
+            });
+        }
+        self.parse_postfix()
+    }
+
 
 }
