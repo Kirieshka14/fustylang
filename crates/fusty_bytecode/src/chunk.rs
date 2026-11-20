@@ -38,3 +38,54 @@ pub struct FunctionMeta {
     pub is_meow: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct Chunk {
+    pub code: Vec<u8>,
+    pub constants: Vec<Constant>,
+    pub lines: Vec<usize>,
+    pub functions: Vec<FunctionMeta>,
+    pub global_count: u16,
+}
+
+impl Chunk {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn write_op(&mut self, op: Opcode, line: usize) {
+        self.code.push(op as u8);
+        self.lines.push(line);
+    }
+
+    pub fn write_byte(&mut self, byte: u8, line: usize) {
+        self.code.push(byte);
+        self.lines.push(line);
+    }
+
+    pub fn write_u16(&mut self, val: u16, line: usize) {
+        self.write_byte((val >> 8) as u8, line);
+        self.write_byte((val & 0xFF) as u8, line);
+    }
+
+    pub fn try_add_constant(&mut self, constant: Constant) -> Result<u16, String> {
+        if let Some(pos) = self.constants.iter().position(|c| c.same_value(&constant)) {
+            return Ok(pos as u16);
+        }
+        if self.constants.len() >= u16::MAX as usize {
+            return Err("Too many constants in chunk (max 65535)".into());
+        }
+        self.constants.push(constant);
+        Ok((self.constants.len() - 1) as u16)
+    }
+
+    pub fn add_constant(&mut self, constant: Constant) -> u16 {
+        self.try_add_constant(constant)
+            .expect("Chunk constant pool overflow")
+    }
+
+    pub fn write_const(&mut self, constant: Constant, line: usize) {
+        let idx = self.add_constant(constant);
+        self.write_op(Opcode::Const, line);
+        self.write_u16(idx, line);
+    }
+}
