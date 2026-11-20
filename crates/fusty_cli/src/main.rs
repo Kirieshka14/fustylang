@@ -135,4 +135,61 @@ fn run_source(source: &str, file_name: &str) -> bool {
     }
 }
 
-fn main() {}
+fn main() -> ExitCode {
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() > 1 && args[1] == "run" {
+        if args.len() < 3 {
+            eprintln!("Usage: fusty run <path_to_script.fy>");
+            return ExitCode::FAILURE;
+        }
+        let path = &args[2];
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                if run_source(&content, path) {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read file '{}': {}", path, e);
+                ExitCode::FAILURE
+            }
+        }
+    } else {
+        println!("FustyLang (Fusty) v0.1.0 — Fast Rust-like scripting for Ferrium");
+        println!("(Run with `fusty run <file.fy>` or test built-in game combat demo)\n");
+
+        let demo_script = r#"
+            // Fast Combat & Arena Demo
+            let mut player_pos = vec2(100.0, 50.0);
+            let target_pos = vec2(300.0, 200.0);
+
+            // Vector math
+            let to_target = target_pos - player_pos;
+            let dir = to_target.normalized();
+            let vel = dir * 250.0;
+
+            player_pos += vel * 0.016; // 1 frame tick (60 FPS)
+
+            // Dynamic attack combo with coroutine timing
+            wait 0.25;
+
+            // Unchecked safety bypass for raw fast-path
+            meow {
+                let fast_val = 1337;
+                log("meow fast_val =", fast_val);
+            }
+
+            wait 0.15;
+            return player_pos;
+        "#;
+
+        if run_source(demo_script, "<embedded demo>") {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        }
+    }
+}
