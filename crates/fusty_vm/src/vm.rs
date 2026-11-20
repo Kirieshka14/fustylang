@@ -111,5 +111,132 @@ impl Vm {
         self.run_with_host_budget(chunk, host, Self::DEFAULT_STEP_BUDGET)
     }
 
+    pub fn run_with_host_budget(
+        &mut self,
+        chunk: &Chunk,
+        host: &mut dyn Host,
+        max_steps: usize,
+    ) -> Result<VmResult, VmError> {
+        let needed_globals = chunk.global_count as usize;
+        if self.globals.len() < needed_globals {
+            self.globals.resize(needed_globals, Value::Nil);
+        }
 
+        let mut steps = 0usize;
+        let code = chunk.code.as_slice();
+        let code_len = code.len();
+        let mut base_slot = self.frames.last().map(|f| f.base_slot).unwrap_or(0);
+
+        while self.ip < code_len {
+            steps += 1;
+            if steps > max_steps {
+                return Err(VmError {
+                    message: format!(
+                        "Execution budget exceeded ({} steps without wait/yield)",
+                        max_steps
+                    ),
+                    line: line_at(chunk, self.ip),
+                });
+            }
+
+            let op_ip = self.ip;
+            let byte = code[op_ip];
+            self.ip = op_ip + 1;
+
+            let op = match Opcode::from_u8(byte) {
+                Some(op) => op,
+                None => {
+                    return Err(VmError {
+                        message: format!("Unknown opcode byte: 0x{:02X}", byte),
+                        line: line_at(chunk, op_ip),
+                    })
+                }
+            };
+
+            match op {
+                Opcode::Const => {
+                    let idx = self.read_u16(chunk, op_ip)?;
+                    let c = chunk.constants.get(idx as usize).ok_or_else(|| VmError {
+                        message: format!("Invalid constant index {}", idx),
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    let val = match c {
+                        Constant::Int(i) => Value::Int(*i),
+                        Constant::Float(f) => Value::Float(*f),
+                        Constant::Bool(b) => Value::Bool(*b),
+                        Constant::String(s) => Value::String(s.clone()),
+                        Constant::Vec2(x, y) => Value::V2(Vec2::new(*x, *y)),
+                        Constant::Vec3(x, y, z) => Value::V3(Vec3::new(*x, *y, *z)),
+                    };
+                    self.stack.push(val);
+                }
+
+                Opcode::Nil => self.stack.push(Value::Nil),
+                Opcode::True => self.stack.push(Value::Bool(true)),
+                Opcode::False => self.stack.push(Value::Bool(false)),
+
+                Opcode::Pop => {
+                    self.stack.pop();
+                }
+
+                Opcode::PopUnder => {
+                    let count = self.read_u16(chunk, op_ip)? as usize;
+                    let top = self.pop(chunk, op_ip)?;
+                    if count > self.stack.len() {
+                        return Err(VmError {
+                            message: "Stack underflow on PopUnder".into(),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    self.stack.truncate(self.stack.len() - count);
+                    self.stack.push(top);
+                }
+
+                Opcode::GetLocal => {
+                    let slot = self.read_u16(chunk, op_ip)? as usize;
+                    let idx = base_slot + slot;
+                    let val = self.stack.get(idx).cloned().ok_or_else(|| VmError {
+                        message: format!("Out-of-bounds local read slot {}", idx),
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(val);
+                }
+
+                Opcode::SetLocal => {
+                    let slot = self.read_u16(chunk, op_ip)? as usize;
+                    let idx = base_slot + slot;
+                    let val = self.peek(0, chunk, op_ip)?.clone();
+                    if idx >= self.stack.len() {
+                        return Err(VmError {
+                            message: format!("Out-of-bounds local write slot {}", idx),
+                            line: line_at(chunk, op_ip),
+                        });
+                    }
+                    self.stack[idx] = val;
+                }
+
+                Opcode::GetGlobal => {
+                    let slot = self.read_u16(chunk, op_ip)? as usize;
+                    let val = self.globals.get(slot).cloned().ok_or_else(|| VmError {
+                        message: format!("Out-of-bounds global read slot {}", slot),
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(val);
+                }
+
+                Opcode::SetGlobal => {
+                    let slot = self.read_u16(chunk, op_ip)? as usize;
+                    let val = self.peek(0, chunk, op_ip)?.clone();
+                    if slot >= self.globals.len() {
+                        self.globals.resize(slot + 1, Value::Nil);
+                    }
+                    self.globals[slot] = val;
+                }
+
+
+                _ => {}
+            }
+        }
+        Ok(VmResult::Done(Value::Nil))
+    }
 }
