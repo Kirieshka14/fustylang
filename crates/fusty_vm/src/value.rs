@@ -210,5 +210,56 @@ impl Value {
         }
     }
 
+    pub fn add(&self, rhs: &Value) -> Result<Value, String> {
+        match (self, rhs) {
+            (Value::Int(a), Value::Int(b)) => a
+                .checked_add(*b)
+                .map(Value::Int)
+                .ok_or_else(|| "Integer overflow in addition".to_string()),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
+            (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
+            (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a + *b as f64)),
+            (Value::V2(a), Value::V2(b)) => Ok(Value::V2(*a + *b)),
+            (Value::V3(a), Value::V3(b)) => Ok(Value::V3(*a + *b)),
+            (Value::String(a), Value::String(b)) => Ok(Value::String(format!("{}{}", a, b))),
+            (a, b) => Err(format!("Cannot add {} and {}", a, b)),
+        }
+    }
+
+    pub fn sub(&self, rhs: &Value) -> Result<Value, String> {
+        match (self, rhs) {
+            (Value::Int(a), Value::Int(b)) => a
+                .checked_sub(*b)
+                .map(Value::Int)
+                .ok_or_else(|| "Integer overflow in subtraction".to_string()),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
+            (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 - b)),
+            (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a - *b as f64)),
+            (Value::V2(a), Value::V2(b)) => Ok(Value::V2(*a - *b)),
+            (Value::V3(a), Value::V3(b)) => Ok(Value::V3(*a - *b)),
+            (a, b) => Err(format!("Cannot subtract {} and {}", a, b)),
+        }
+    }
+
+    pub fn mul(&self, rhs: &Value) -> Result<Value, String> {
+        match (self, rhs) {
+            (Value::Int(a), Value::Int(b)) => a
+                .checked_mul(*b)
+                .map(Value::Int)
+                .ok_or_else(|| "Integer overflow in multiplication".to_string()),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
+            (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
+            (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a * *b as f64)),
+            (Value::V2(a), Value::Float(b)) => Ok(Value::V2(*a * (*b as f32))),
+            (Value::Float(a), Value::V2(b)) => Ok(Value::V2(*b * (*a as f32))),
+            (Value::V2(a), Value::Int(b)) => Ok(Value::V2(*a * (*b as f32))),
+            (Value::Int(a), Value::V2(b)) => Ok(Value::V2(*b * (*a as f32))),
+            (Value::V3(a), Value::Float(b)) => Ok(Value::V3(*a * (*b as f32))),
+            (Value::Float(a), Value::V3(b)) => Ok(Value::V3(*b * (*a as f32))),
+            (Value::V3(a), Value::Int(b)) => Ok(Value::V3(*a * (*b as f32))),
+            (Value::Int(a), Value::V3(b)) => Ok(Value::V3(*b * (*a as f32))),
+            (a, b) => Err(format!("Cannot multiply {} and {}", a, b)),
+        }
+    }
 
 }
