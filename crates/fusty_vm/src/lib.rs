@@ -106,5 +106,59 @@ mod tests {
         assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Int(122)));
     }
 
+    struct MockHost {
+        teleports: usize,
+    }
+
+    impl Host for MockHost {
+        fn call_native(
+            &mut self,
+            name: &str,
+            args: &[Value],
+            meow_mode: bool,
+        ) -> Result<Value, String> {
+            match name {
+                "raw_teleport" => {
+                    if !meow_mode {
+                        return Err("Requires meow mode".into());
+                    }
+                    self.teleports += args.len();
+                    Ok(Value::Bool(true))
+                }
+                _ => Err(format!("Unknown native {}", name)),
+            }
+        }
+    }
+
+    #[test]
+    fn test_vm_native_host_meow_enforcement() {
+        let safe_fail = compile_src("raw_teleport(vec2(10.0, 20.0));");
+        let mut host = MockHost { teleports: 0 };
+        let mut vm = Vm::new();
+        assert!(vm.run_with_host(&safe_fail, &mut host).is_err());
+        assert_eq!(host.teleports, 0);
+
+        let meow_ok = compile_src(r#"
+            meow {
+                raw_teleport(vec2(10.0, 20.0));
+            }
+        "#);
+        let mut vm2 = Vm::new();
+        assert_eq!(
+            vm2.run_with_host(&meow_ok, &mut host).unwrap(),
+            VmResult::Done(Value::Nil)
+        );
+        assert_eq!(host.teleports, 1);
+    }
+
+    #[test]
+    fn test_vm_step_budget_prevents_infinite_loop_hang() {
+        let chunk = compile_src("while true { let x = 1; }");
+        let mut vm = Vm::new();
+        let mut host = NoopHost;
+        let err = vm.run_with_host_budget(&chunk, &mut host, 1_000).unwrap_err();
+        assert!(err.message.contains("budget exceeded"));
+    }
+
 
 }
