@@ -121,5 +121,89 @@ impl Compiler {
         Ok(self.chunk)
     }
 
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self, line: usize) {
+        self.scope_depth -= 1;
+        while let Some(local) = self.locals.last() {
+            if local.depth > self.scope_depth {
+                self.chunk.write_op(Opcode::Pop, line);
+                self.locals.pop();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn end_scope_keeping_top(&mut self, line: usize) -> Result<(), CompileError> {
+        self.scope_depth -= 1;
+        let mut count = 0usize;
+        while let Some(local) = self.locals.last() {
+            if local.depth > self.scope_depth {
+                self.locals.pop();
+                count += 1;
+            } else {
+                break;
+            }
+        }
+        if count > 0 {
+            if count > u16::MAX as usize {
+                return Err(CompileError {
+                    message: "Too many locals in block".into(),
+                });
+            }
+            self.chunk.write_op(Opcode::PopUnder, line);
+            self.chunk.write_u16(count as u16, line);
+        }
+        Ok(())
+    }
+
+    fn resolve_var(&self, name: &str) -> Option<VarBinding> {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name == name {
+                return Some(VarBinding::Local {
+                    slot: i as u16,
+                    is_mut: local.is_mut,
+                });
+            }
+        }
+        for global in self.globals.iter().rev() {
+            if global.name == name {
+                return Some(VarBinding::Global {
+                    slot: global.slot,
+                    is_mut: global.is_mut,
+                });
+            }
+        }
+        None
+    }
+
+    fn emit_const(&mut self, constant: Constant, line: usize) -> Result<(), CompileError> {
+        let idx = self
+            .chunk
+            .try_add_constant(constant)
+            .map_err(|message| CompileError { message })?;
+        self.chunk.write_op(Opcode::Const, line);
+        self.chunk.write_u16(idx, line);
+        Ok(())
+    }
+
+    fn compile_block_value(&mut self, block: &Block) -> Result<(), CompileError> {
+        let line = block.span.line;
+        self.begin_scope();
+        for s in &block.stmts {
+            self.compile_stmt(s)?;
+        }
+        if let Some(expr) = &block.expr {
+            self.compile_expr(expr)?;
+        } else {
+            self.chunk.write_op(Opcode::Nil, line);
+        }
+        self.end_scope_keeping_top(line)?;
+        Ok(())
+    }
+
 
 }
