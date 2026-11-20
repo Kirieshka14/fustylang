@@ -391,6 +391,115 @@ impl Compiler {
                 }
             }
 
+            Stmt::CompoundAssign {
+                target,
+                op,
+                value,
+                span,
+            } => {
+                let line = span.line;
+                let math_op = match op {
+                    BinOp::Add => Opcode::Add,
+                    BinOp::Sub => Opcode::Sub,
+                    BinOp::Mul => Opcode::Mul,
+                    BinOp::Div => Opcode::Div,
+                    _ => {
+                        return Err(CompileError {
+                            message: "Unsupported compound assignment operator".into(),
+                        })
+                    }
+                };
+                match target {
+                    Expr::Ident(name, _) => {
+                        let binding = self.resolve_var(name).ok_or_else(|| CompileError {
+                            message: format!("Undefined variable '{}'", name),
+                        })?;
+                        let (get_op, store_op, slot, is_mut) = match binding {
+                            VarBinding::Local { slot, is_mut } => {
+                                (Opcode::GetLocal, Opcode::SetLocal, slot, is_mut)
+                            }
+                            VarBinding::Global { slot, is_mut } => {
+                                (Opcode::GetGlobal, Opcode::SetGlobal, slot, is_mut)
+                            }
+                        };
+                        if !is_mut {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Cannot mutate immutable variable '{}' (use `let mut`)",
+                                    name
+                                ),
+                            });
+                        }
+                        self.chunk.write_op(get_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.compile_expr(value)?;
+                        self.chunk.write_op(math_op, line);
+                        self.chunk.write_op(store_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.chunk.write_op(Opcode::Pop, line);
+                    }
+                    Expr::FieldAccess {
+                        target: inner,
+                        field,
+                        ..
+                    } => {
+                        let Expr::Ident(name, _) = inner.as_ref() else {
+                            return Err(CompileError {
+                                message: "Compound field assignment target must be a variable".into(),
+                            });
+                        };
+                        let (get_field_op, set_field_op) = match field.as_str() {
+                            "x" => (Opcode::VecGetX, Opcode::VecSetX),
+                            "y" => (Opcode::VecGetY, Opcode::VecSetY),
+                            "z" => (Opcode::VecGetZ, Opcode::VecSetZ),
+                            other => {
+                                return Err(CompileError {
+                                    message: format!("Unknown field '{}'", other),
+                                })
+                            }
+                        };
+                        let binding = self.resolve_var(name).ok_or_else(|| CompileError {
+                            message: format!("Undefined variable '{}'", name),
+                        })?;
+                        let (get_op, store_op, slot, is_mut) = match binding {
+                            VarBinding::Local { slot, is_mut } => {
+                                (Opcode::GetLocal, Opcode::SetLocal, slot, is_mut)
+                            }
+                            VarBinding::Global { slot, is_mut } => {
+                                (Opcode::GetGlobal, Opcode::SetGlobal, slot, is_mut)
+                            }
+                        };
+                        if !is_mut {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Cannot mutate field '{}' of immutable variable '{}' (use `let mut`)",
+                                    field, name
+                                ),
+                            });
+                        }
+                        // Push vec, then compute (vec.field op value), then VecSet*, store
+                        self.chunk.write_op(get_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.chunk.write_op(get_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.chunk.write_op(get_field_op, line);
+                        self.compile_expr(value)?;
+                        self.chunk.write_op(math_op, line);
+                        self.chunk.write_op(set_field_op, line);
+                        self.chunk.write_op(store_op, line);
+                        self.chunk.write_u16(slot, line);
+                        self.chunk.write_op(Opcode::Pop, line);
+                    }
+                    _ => {
+                        return Err(CompileError {
+                            message: "Compound assignment target must be a variable or vector field"
+                                .into(),
+                        });
+                    }
+                }
+            }
+
+
             _ => {}
         }
         Ok(())
