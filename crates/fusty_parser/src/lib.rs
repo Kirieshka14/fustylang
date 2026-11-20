@@ -668,5 +668,70 @@ impl Parser {
         self.parse_postfix()
     }
 
+    fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            if self.match_token(&TokenKind::LParen) {
+                // Call
+                let mut args = Vec::new();
+                while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                    args.push(self.parse_expr()?);
+                    if !self.match_token(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                let end = self.expect(&TokenKind::RParen, "')'")?.span;
+                let span = Span::new(expr.span().start, end.end, expr.span().line, expr.span().col);
+                expr = Expr::Call {
+                    callee: Box::new(expr),
+                    args,
+                    span,
+                };
+            } else if self.match_token(&TokenKind::Dot) {
+                let member_tok = self.advance();
+                let member_name = match member_tok.kind {
+                    TokenKind::Ident(s) => s,
+                    _ => {
+                        return Err(ParseError {
+                            message: "Expected member name after '.'".into(),
+                            span: member_tok.span,
+                        })
+                    }
+                };
+
+                if self.match_token(&TokenKind::LParen) {
+                    // Method call
+                    let mut args = Vec::new();
+                    while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                        args.push(self.parse_expr()?);
+                        if !self.match_token(&TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                    let end = self.expect(&TokenKind::RParen, "')'")?.span;
+                    let span = Span::new(expr.span().start, end.end, expr.span().line, expr.span().col);
+                    expr = Expr::MethodCall {
+                        target: Box::new(expr),
+                        method: member_name,
+                        args,
+                        span,
+                    };
+                } else {
+                    // Field access
+                    let span = Span::new(expr.span().start, member_tok.span.end, expr.span().line, expr.span().col);
+                    expr = Expr::FieldAccess {
+                        target: Box::new(expr),
+                        field: member_name,
+                        span,
+                    };
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
 
 }
