@@ -516,4 +516,87 @@ impl Parser {
         })
     }
 
+    pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        self.parse_or()
+    }
+
+    fn parse_or(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_and()?;
+        while self.match_token(&TokenKind::Or) {
+            let right = self.parse_and()?;
+            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            left = Expr::Binary {
+                left: Box::new(left),
+                op: BinOp::Or,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_and(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_equality()?;
+        while self.match_token(&TokenKind::And) {
+            let right = self.parse_equality()?;
+            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            left = Expr::Binary {
+                left: Box::new(left),
+                op: BinOp::And,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_equality(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_comparison()?;
+        loop {
+            let op = if self.match_token(&TokenKind::Eq) {
+                BinOp::Eq
+            } else if self.match_token(&TokenKind::NotEq) {
+                BinOp::NotEq
+            } else {
+                break;
+            };
+            let right = self.parse_comparison()?;
+            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            left = Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_term()?;
+        loop {
+            let op = if self.match_token(&TokenKind::Lt) {
+                BinOp::Lt
+            } else if self.match_token(&TokenKind::LtEq) {
+                BinOp::LtEq
+            } else if self.match_token(&TokenKind::Gt) {
+                BinOp::Gt
+            } else if self.match_token(&TokenKind::GtEq) {
+                BinOp::GtEq
+            } else {
+                break;
+            };
+            let right = self.parse_term()?;
+            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            left = Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+
 }
