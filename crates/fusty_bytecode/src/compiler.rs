@@ -767,6 +767,99 @@ impl Compiler {
                 self.patch_jump(end_jump)?;
             }
 
+            Expr::MethodCall {
+                target,
+                method,
+                args,
+                ..
+            } => {
+                self.compile_expr(target)?;
+                match method.as_str() {
+                    "normalized" => {
+                        if !args.is_empty() {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Method 'normalized' expects 0 arguments, got {}",
+                                    args.len()
+                                ),
+                            });
+                        }
+                        self.chunk.write_op(Opcode::Vec2Normalize, line);
+                    }
+                    "length" => {
+                        if !args.is_empty() {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Method 'length' expects 0 arguments, got {}",
+                                    args.len()
+                                ),
+                            });
+                        }
+                        self.chunk.write_op(Opcode::Vec2Length, line);
+                    }
+                    "dot" => {
+                        if args.len() != 1 {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Method 'dot' expects 1 argument, got {}",
+                                    args.len()
+                                ),
+                            });
+                        }
+                        self.compile_expr(&args[0])?;
+                        self.chunk.write_op(Opcode::Vec2Dot, line);
+                    }
+                    "cross" => {
+                        if args.len() != 1 {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Method 'cross' expects 1 argument, got {}",
+                                    args.len()
+                                ),
+                            });
+                        }
+                        self.compile_expr(&args[0])?;
+                        self.chunk.write_op(Opcode::Vec3Cross, line);
+                    }
+                    "distance" => {
+                        if args.len() != 1 {
+                            return Err(CompileError {
+                                message: format!(
+                                    "Method 'distance' expects 1 argument, got {}",
+                                    args.len()
+                                ),
+                            });
+                        }
+                        self.compile_expr(&args[0])?;
+                        self.chunk.write_op(Opcode::Sub, line);
+                        self.chunk.write_op(Opcode::Vec2Length, line);
+                    }
+                    other => {
+                        return Err(CompileError {
+                            message: format!("Unknown method '{}'", other),
+                        });
+                    }
+                }
+            }
+
+            Expr::FieldAccess { target, field, .. } => {
+                self.compile_expr(target)?;
+                match field.as_str() {
+                    "x" => self.chunk.write_op(Opcode::VecGetX, line),
+                    "y" => self.chunk.write_op(Opcode::VecGetY, line),
+                    "z" => self.chunk.write_op(Opcode::VecGetZ, line),
+                    other => {
+                        return Err(CompileError {
+                            message: format!("Unknown field '{}'", other),
+                        });
+                    }
+                }
+            }
+
+            Expr::Block(b) => {
+                self.compile_block_value(b)?;
+            }
+
 
             _ => {}
         }
