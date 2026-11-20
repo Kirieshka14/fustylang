@@ -8,3 +8,13 @@
 - **Native Coroutines (`wait`, `yield`):** Pause execution mid-function for a duration (`wait 0.016;`) or yield back to the host loop without losing call-stack frames or local variables.
 - **`meow` Safety Bypass Blocks:** Replaces `unsafe` with `meow { ... }` and `meow fn` scopes tracked at runtime by the VM's call-frame depth counter (`meow_depth`) to gate privileged host intrinsics.
 - **Zero-GC Frame Arena & Step Budgets:** Deterministic $O(1)$ per-tick bump memory arena (`FrameArena`) and configurable instruction step budgets (`DEFAULT_STEP_BUDGET = 200_000`) to prevent infinite loops.
+
+## Architecture & Crates
+
+| Crate | Description |
+| :--- | :--- |
+| `crates/fusty_lexer` | Span-aware tokenizer with nested multi-line comments (`/* ... */`), numeric/string literals, and `meow` / `wait` / `yield` / `vec2` / `vec3` keywords |
+| `crates/fusty_parser` | Recursive-descent and Pratt precedence-climbing AST parser supporting functions, `struct`, `enum`, `impl`, `match`, `if/else`, and `while` loops |
+| `crates/fusty_bytecode` | 3-pass bytecode compiler with forward function resolution, immutability checks (`let` vs `let mut`), loop stack unwinding, and vector intrinsics |
+| `crates/fusty_vm` | Stack-based bytecode Virtual Machine with `CallFrame` management, `Host` FFI trait, `FrameArena`, and coroutine suspension (`VmResult::Waiting` / `Yielded`) |
+| `crates/fusty_cli` | Standalone CLI compiler and runner (`fusty run <script.fy>`) |
