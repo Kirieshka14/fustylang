@@ -164,3 +164,51 @@ impl Div<f32> for Vec3 {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    Nil,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    V2(Vec2),
+    V3(Vec3),
+    String(String),
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Int(i) => write!(f, "{}", i),
+            Value::Float(fl) => write!(f, "{}", fl),
+            Value::V2(v) => write!(f, "vec2({:.2}, {:.2})", v.x, v.y),
+            Value::V3(v) => write!(f, "vec3({:.2}, {:.2}, {:.2})", v.x, v.y, v.z),
+            Value::String(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Value {
+    #[inline]
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Value::Nil => false,
+            Value::Bool(b) => *b,
+            Value::Int(i) => *i != 0,
+            Value::Float(f) => *f != 0.0 && !f.is_nan(),
+            _ => true,
+        }
+    }
+
+    #[inline]
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Value::Float(f) => Some(*f),
+            Value::Int(i) => Some(*i as f64),
+            _ => None,
+        }
+    }
+
+
+}
