@@ -96,5 +96,81 @@ impl Parser {
         }
     }
 
+    fn parse_fn(&mut self) -> Result<FnDecl, ParseError> {
+        let start = self.expect(&TokenKind::Fn, "'fn'")?.span;
+        let name = match self.peek_kind() {
+            TokenKind::Ident(_) => {
+                if let TokenKind::Ident(s) = self.advance().kind {
+                    s
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => {
+                return Err(ParseError {
+                    message: "Expected function name".into(),
+                    span: self.peek().span,
+                })
+            }
+        };
+
+        self.expect(&TokenKind::LParen, "'('")?;
+        let mut params = Vec::new();
+        while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+            let mut is_mut = false;
+            if self.match_token(&TokenKind::Mut) {
+                is_mut = true;
+            }
+
+            let param_tok = self.advance();
+            let param_name = match param_tok.kind {
+                TokenKind::SelfValue => "self".to_string(),
+                TokenKind::Ident(s) => s,
+                _ => {
+                    return Err(ParseError {
+                        message: "Expected parameter name or 'self'".into(),
+                        span: param_tok.span,
+                    })
+                }
+            };
+
+            let ty = if self.match_token(&TokenKind::Colon) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            params.push(Param {
+                name: param_name,
+                is_mut,
+                ty,
+                span: param_tok.span,
+            });
+
+            if !self.match_token(&TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(&TokenKind::RParen, "')'")?;
+
+        let return_ty = if self.match_token(&TokenKind::Arrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        let body = self.parse_block()?;
+        let span = Span::new(start.start, body.span.end, start.line, start.col);
+
+        Ok(FnDecl {
+            name,
+            is_meow: false,
+            params,
+            return_ty,
+            body,
+            span,
+        })
+    }
+
 
 }
