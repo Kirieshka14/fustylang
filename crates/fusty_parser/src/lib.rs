@@ -71,5 +71,30 @@ impl Parser {
         }
     }
 
+    pub fn parse_program(&mut self) -> Result<Program, ParseError> {
+        let mut items = Vec::new();
+        while !self.check(&TokenKind::Eof) {
+            items.push(self.parse_item()?);
+        }
+        Ok(Program { items })
+    }
+
+    pub fn parse_item(&mut self) -> Result<Item, ParseError> {
+        if self.check(&TokenKind::Meow) && self.peek_next_kind() == Some(&TokenKind::Fn) {
+            self.advance(); // consume `meow`
+            let mut func = self.parse_fn()?;
+            func.is_meow = true;
+            return Ok(Item::Fn(func));
+        }
+
+        match self.peek_kind() {
+            TokenKind::Fn => Ok(Item::Fn(self.parse_fn()?)),
+            TokenKind::Struct => Ok(Item::Struct(self.parse_struct()?)),
+            TokenKind::Enum => Ok(Item::Enum(self.parse_enum()?)),
+            TokenKind::Impl => Ok(Item::Impl(self.parse_impl()?)),
+            _ => Ok(Item::Stmt(self.parse_stmt()?)),
+        }
+    }
+
 
 }
