@@ -499,9 +499,101 @@ impl Compiler {
                 }
             }
 
+            Stmt::Expr(expr) => {
+                self.compile_expr(expr)?;
+                self.chunk.write_op(Opcode::Pop, expr.span().line);
+            }
 
-            _ => {}
+            Stmt::Return(expr, span) => {
+                let line = span.line;
+                if let Some(e) = expr {
+                    self.compile_expr(e)?;
+                } else {
+                    self.chunk.write_op(Opcode::Nil, line);
+                }
+                self.chunk.write_op(Opcode::Return, line);
+            }
+
+            Stmt::Yield(span) => {
+                self.chunk.write_op(Opcode::Yield, span.line);
+            }
+
+            Stmt::Break(span) => {
+                let line = span.line;
+                let Some(loop_ctx) = self.loop_stack.last() else {
+                    return Err(CompileError {
+                        message: "'break' used outside of a loop".into(),
+                    });
+                };
+                let pops = self.locals.len().saturating_sub(loop_ctx.local_count);
+                let meow_exits = self.meow_depth.saturating_sub(loop_ctx.meow_depth);
+                for _ in 0..meow_exits {
+                    self.chunk.write_op(Opcode::MeowExit, line);
+                }
+                for _ in 0..pops {
+                    self.chunk.write_op(Opcode::Pop, line);
+                }
+                self.chunk.write_op(Opcode::Jump, line);
+                let jump = self.emit_jump_placeholder(line);
+                self.loop_stack.last_mut().unwrap().break_jumps.push(jump);
+            }
+
+            Stmt::Continue(span) => {
+                let line = span.line;
+                let Some(loop_ctx) = self.loop_stack.last() else {
+                    return Err(CompileError {
+                        message: "'continue' used outside of a loop".into(),
+                    });
+                };
+                let loop_start = loop_ctx.loop_start;
+                let pops = self.locals.len().saturating_sub(loop_ctx.local_count);
+                let meow_exits = self.meow_depth.saturating_sub(loop_ctx.meow_depth);
+                for _ in 0..meow_exits {
+                    self.chunk.write_op(Opcode::MeowExit, line);
+                }
+                for _ in 0..pops {
+                    self.chunk.write_op(Opcode::Pop, line);
+                }
+                self.emit_loop(loop_start, line)?;
+            }
+
+            Stmt::While { cond, body, span } => {
+                let loop_start = self.chunk.code.len();
+                let line = span.line;
+
+                self.compile_expr(cond)?;
+                self.chunk.write_op(Opcode::JumpIfFalse, line);
+                let exit_jump = self.emit_jump_placeholder(line);
+
+                self.chunk.write_op(Opcode::Pop, line); // pop truthy condition
+                self.loop_stack.push(LoopContext {
+                    loop_start,
+                    local_count: self.locals.len(),
+                    meow_depth: self.meow_depth,
+                    break_jumps: Vec::new(),
+                });
+
+                self.begin_scope();
+                for s in &body.stmts {
+                    self.compile_stmt(s)?;
+                }
+                if let Some(expr) = &body.expr {
+                    self.compile_expr(expr)?;
+                    self.chunk.write_op(Opcode::Pop, expr.span().line);
+                }
+                self.end_scope(line);
+
+                self.emit_loop(loop_start, line)?;
+                self.patch_jump(exit_jump)?;
+                self.chunk.write_op(Opcode::Pop, line); // pop falsy condition
+
+                let ctx = self.loop_stack.pop().unwrap();
+                for bj in ctx.break_jumps {
+                    self.patch_jump(bj)?;
+                }
+            }
         }
         Ok(())
     }
+
 }
