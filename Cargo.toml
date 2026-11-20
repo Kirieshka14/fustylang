@@ -3,5 +3,6 @@ members = [
     "crates/fusty_lexer",
     "crates/fusty_parser",
     "crates/fusty_bytecode",
+    "crates/fusty_vm",
 ]
 resolver = "2"
