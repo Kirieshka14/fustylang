@@ -682,6 +682,91 @@ impl Compiler {
                 }
             }
 
+            Expr::Call { callee, args, .. } => {
+                let fn_name = match callee.as_ref() {
+                    Expr::Ident(name, _) => name,
+                    _ => {
+                        return Err(CompileError {
+                            message: "Call target must be a function identifier".into(),
+                        })
+                    }
+                };
+                if args.len() > u8::MAX as usize {
+                    return Err(CompileError {
+                        message: "Too many arguments in function call".into(),
+                    });
+                }
+                let argc = args.len() as u8;
+                if let Some(&expected_arity) = self.fn_arities.get(fn_name) {
+                    if expected_arity != argc {
+                        return Err(CompileError {
+                            message: format!(
+                                "Function '{}' expects {} argument(s), got {}",
+                                fn_name, expected_arity, argc
+                            ),
+                        });
+                    }
+                }
+                for arg in args {
+                    self.compile_expr(arg)?;
+                }
+                if let Some(&fn_idx) = self.fn_indices.get(fn_name) {
+                    self.chunk.write_op(Opcode::Call, line);
+                    self.chunk.write_u16(fn_idx, line);
+                    self.chunk.write_byte(argc, line);
+                } else {
+                    let name_idx = self
+                        .chunk
+                        .try_add_constant(Constant::String(fn_name.clone()))
+                        .map_err(|message| CompileError { message })?;
+                    self.chunk.write_op(Opcode::CallNative, line);
+                    self.chunk.write_u16(name_idx, line);
+                    self.chunk.write_byte(argc, line);
+                }
+            }
+
+            Expr::MeowBlock { block, span } => {
+                self.chunk.write_op(Opcode::MeowEnter, span.line);
+                self.meow_depth += 1;
+                self.compile_block_value(block)?;
+                self.meow_depth -= 1;
+                self.chunk.write_op(Opcode::MeowExit, span.line);
+            }
+
+            Expr::Wait { duration, span } => {
+                self.compile_expr(duration)?;
+                self.chunk.write_op(Opcode::Wait, span.line);
+                self.chunk.write_op(Opcode::Nil, span.line);
+            }
+
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                span,
+            } => {
+                self.compile_expr(cond)?;
+                self.chunk.write_op(Opcode::JumpIfFalse, span.line);
+                let else_jump = self.emit_jump_placeholder(span.line);
+
+                self.chunk.write_op(Opcode::Pop, span.line); // pop truthy cond
+                self.compile_block_value(then_branch)?;
+
+                self.chunk.write_op(Opcode::Jump, span.line);
+                let end_jump = self.emit_jump_placeholder(span.line);
+
+                self.patch_jump(else_jump)?;
+                self.chunk.write_op(Opcode::Pop, span.line); // pop falsy cond
+
+                if let Some(else_b) = else_branch {
+                    self.compile_block_value(else_b)?;
+                } else {
+                    self.chunk.write_op(Opcode::Nil, span.line);
+                }
+
+                self.patch_jump(end_jump)?;
+            }
+
 
             _ => {}
         }
