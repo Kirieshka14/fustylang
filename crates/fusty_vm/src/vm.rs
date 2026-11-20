@@ -349,6 +349,177 @@ impl Vm {
                     self.stack.push(Value::Bool(ord != Ordering::Less));
                 }
 
+                Opcode::MakeVec2 => {
+                    let y = self.pop_f32(chunk, op_ip)?;
+                    let x = self.pop_f32(chunk, op_ip)?;
+                    self.stack.push(Value::V2(Vec2::new(x, y)));
+                }
+
+                Opcode::MakeVec3 => {
+                    let z = self.pop_f32(chunk, op_ip)?;
+                    let y = self.pop_f32(chunk, op_ip)?;
+                    let x = self.pop_f32(chunk, op_ip)?;
+                    self.stack.push(Value::V3(Vec3::new(x, y, z)));
+                }
+
+                Opcode::Vec2Add => {
+                    let b = self.pop_vec2(chunk, op_ip)?;
+                    let a = self.pop_vec2(chunk, op_ip)?;
+                    self.stack.push(Value::V2(a + b));
+                }
+
+                Opcode::Vec2Sub => {
+                    let b = self.pop_vec2(chunk, op_ip)?;
+                    let a = self.pop_vec2(chunk, op_ip)?;
+                    self.stack.push(Value::V2(a - b));
+                }
+
+                Opcode::Vec2MulScalar => {
+                    let scalar = self.pop_f32(chunk, op_ip)?;
+                    let vec = self.pop_vec2(chunk, op_ip)?;
+                    self.stack.push(Value::V2(vec * scalar));
+                }
+
+                Opcode::Vec2Dot => match (self.pop(chunk, op_ip)?, self.pop(chunk, op_ip)?) {
+                    (Value::V2(b), Value::V2(a)) => {
+                        self.stack.push(Value::Float(a.dot(b) as f64));
+                    }
+                    (Value::V3(b), Value::V3(a)) => {
+                        self.stack.push(Value::Float(a.dot(b) as f64));
+                    }
+                    (b, a) => {
+                        return Err(VmError {
+                            message: format!(
+                                "Expected matching vectors for .dot, got {} and {}",
+                                a, b
+                            ),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::Vec2Length => match self.pop(chunk, op_ip)? {
+                    Value::V2(vec) => self.stack.push(Value::Float(vec.length() as f64)),
+                    Value::V3(vec) => self.stack.push(Value::Float(vec.length() as f64)),
+                    other => {
+                        return Err(VmError {
+                            message: format!("Expected vector for .length, got {:?}", other),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::Vec2Normalize => match self.pop(chunk, op_ip)? {
+                    Value::V2(vec) => self.stack.push(Value::V2(vec.normalized())),
+                    Value::V3(vec) => self.stack.push(Value::V3(vec.normalized())),
+                    other => {
+                        return Err(VmError {
+                            message: format!("Expected vector for .normalized, got {:?}", other),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::Vec3Cross => match (self.pop(chunk, op_ip)?, self.pop(chunk, op_ip)?) {
+                    (Value::V3(b), Value::V3(a)) => {
+                        self.stack.push(Value::V3(a.cross(b)));
+                    }
+                    (b, a) => {
+                        return Err(VmError {
+                            message: format!("Expected vec3 operands for .cross, got {} and {}", a, b),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::VecGetX => match self.pop(chunk, op_ip)? {
+                    Value::V2(v) => self.stack.push(Value::Float(v.x as f64)),
+                    Value::V3(v) => self.stack.push(Value::Float(v.x as f64)),
+                    other => {
+                        return Err(VmError {
+                            message: format!("Expected vector for .x, got {:?}", other),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::VecGetY => match self.pop(chunk, op_ip)? {
+                    Value::V2(v) => self.stack.push(Value::Float(v.y as f64)),
+                    Value::V3(v) => self.stack.push(Value::Float(v.y as f64)),
+                    other => {
+                        return Err(VmError {
+                            message: format!("Expected vector for .y, got {:?}", other),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::VecGetZ => match self.pop(chunk, op_ip)? {
+                    Value::V3(v) => self.stack.push(Value::Float(v.z as f64)),
+                    other => {
+                        return Err(VmError {
+                            message: format!("Expected vec3 for .z, got {:?}", other),
+                            line: line_at(chunk, op_ip),
+                        })
+                    }
+                },
+
+                Opcode::VecSetX => {
+                    let val = self.pop_f32(chunk, op_ip)?;
+                    match self.pop(chunk, op_ip)? {
+                        Value::V2(mut v) => {
+                            v.x = val;
+                            self.stack.push(Value::V2(v));
+                        }
+                        Value::V3(mut v) => {
+                            v.x = val;
+                            self.stack.push(Value::V3(v));
+                        }
+                        other => {
+                            return Err(VmError {
+                                message: format!("Expected vector for .x assignment, got {:?}", other),
+                                line: line_at(chunk, op_ip),
+                            })
+                        }
+                    }
+                }
+
+                Opcode::VecSetY => {
+                    let val = self.pop_f32(chunk, op_ip)?;
+                    match self.pop(chunk, op_ip)? {
+                        Value::V2(mut v) => {
+                            v.y = val;
+                            self.stack.push(Value::V2(v));
+                        }
+                        Value::V3(mut v) => {
+                            v.y = val;
+                            self.stack.push(Value::V3(v));
+                        }
+                        other => {
+                            return Err(VmError {
+                                message: format!("Expected vector for .y assignment, got {:?}", other),
+                                line: line_at(chunk, op_ip),
+                            })
+                        }
+                    }
+                }
+
+                Opcode::VecSetZ => {
+                    let val = self.pop_f32(chunk, op_ip)?;
+                    match self.pop(chunk, op_ip)? {
+                        Value::V3(mut v) => {
+                            v.z = val;
+                            self.stack.push(Value::V3(v));
+                        }
+                        other => {
+                            return Err(VmError {
+                                message: format!("Expected vec3 for .z assignment, got {:?}", other),
+                                line: line_at(chunk, op_ip),
+                            })
+                        }
+                    }
+                }
+
 
                 _ => {}
             }
