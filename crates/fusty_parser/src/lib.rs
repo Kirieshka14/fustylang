@@ -396,5 +396,77 @@ impl Parser {
         Ok(Stmt::Yield(Span::new(start.start, end.end, start.line, start.col)))
     }
 
+    fn parse_let_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::Let, "'let'")?.span;
+        let mut is_mut = false;
+        if self.match_token(&TokenKind::Mut) {
+            is_mut = true;
+        }
+
+        let name_tok = self.advance();
+        let name = match name_tok.kind {
+            TokenKind::Ident(s) => s,
+            _ => {
+                return Err(ParseError {
+                    message: "Expected variable name after let".into(),
+                    span: name_tok.span,
+                })
+            }
+        };
+
+        let ty = if self.match_token(&TokenKind::Colon) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        let init = if self.match_token(&TokenKind::Assign) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+        let span = Span::new(start.start, end.end, start.line, start.col);
+
+        Ok(Stmt::Let {
+            name,
+            is_mut,
+            ty,
+            init,
+            span,
+        })
+    }
+
+    fn parse_return_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::Return, "'return'")?.span;
+        let val = if !self.check(&TokenKind::Semicolon) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+        Ok(Stmt::Return(val, Span::new(start.start, end.end, start.line, start.col)))
+    }
+
+    fn parse_while_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::While, "'while'")?.span;
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        let span = Span::new(start.start, body.span.end, start.line, start.col);
+        Ok(Stmt::While { cond, body, span })
+    }
+
+    fn parse_wait_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect(&TokenKind::Wait, "'wait'")?.span;
+        let duration = self.parse_expr()?;
+        let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
+        let span = Span::new(start.start, end.end, start.line, start.col);
+        Ok(Stmt::Expr(Expr::Wait {
+            duration: Box::new(duration),
+            span,
+        }))
+    }
+
 
 }
