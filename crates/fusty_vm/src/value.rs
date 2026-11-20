@@ -262,4 +262,148 @@ impl Value {
         }
     }
 
+    pub fn div(&self, rhs: &Value) -> Result<Value, String> {
+        match (self, rhs) {
+            (Value::Int(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err("Division by zero".into())
+                } else {
+                    a.checked_div(*b)
+                        .map(Value::Int)
+                        .ok_or_else(|| "Integer overflow in division".to_string())
+                }
+            }
+            (Value::Float(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::Float(a / b))
+                }
+            }
+            (Value::Int(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::Float(*a as f64 / b))
+                }
+            }
+            (Value::Float(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::Float(a / *b as f64))
+                }
+            }
+            (Value::V2(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::V2(*a / (*b as f32)))
+                }
+            }
+            (Value::V2(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::V2(*a / (*b as f32)))
+                }
+            }
+            (Value::V3(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::V3(*a / (*b as f32)))
+                }
+            }
+            (Value::V3(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(Value::V3(*a / (*b as f32)))
+                }
+            }
+            (a, b) => Err(format!("Cannot divide {} by {}", a, b)),
+        }
+    }
+
+    pub fn rem(&self, rhs: &Value) -> Result<Value, String> {
+        match (self, rhs) {
+            (Value::Int(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err("Modulo by zero".into())
+                } else {
+                    a.checked_rem(*b)
+                        .map(Value::Int)
+                        .ok_or_else(|| "Integer overflow in modulo".to_string())
+                }
+            }
+            (Value::Float(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err("Modulo by zero".into())
+                } else {
+                    Ok(Value::Float(a % b))
+                }
+            }
+            (Value::Int(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err("Modulo by zero".into())
+                } else {
+                    Ok(Value::Float((*a as f64) % b))
+                }
+            }
+            (Value::Float(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err("Modulo by zero".into())
+                } else {
+                    Ok(Value::Float(a % (*b as f64)))
+                }
+            }
+            (a, b) => Err(format!("Cannot compute remainder of {} and {}", a, b)),
+        }
+    }
+
+    pub fn neg(&self) -> Result<Value, String> {
+        match self {
+            Value::Int(i) => i
+                .checked_neg()
+                .map(Value::Int)
+                .ok_or_else(|| "Integer overflow in negation".to_string()),
+            Value::Float(f) => Ok(Value::Float(-f)),
+            Value::V2(v) => Ok(Value::V2(Vec2::new(-v.x, -v.y))),
+            Value::V3(v) => Ok(Value::V3(Vec3::new(-v.x, -v.y, -v.z))),
+            other => Err(format!("Cannot negate {}", other)),
+        }
+    }
+
+    pub fn equals(&self, rhs: &Value) -> bool {
+        match (self, rhs) {
+            (Value::Nil, Value::Nil) => true,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Int(a), Value::Float(b)) => (*a as f64) == *b,
+            (Value::Float(a), Value::Int(b)) => *a == (*b as f64),
+            (Value::V2(a), Value::V2(b)) => a == b,
+            (Value::V3(a), Value::V3(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    pub fn cmp_ord(&self, rhs: &Value) -> Result<Ordering, String> {
+        match (self, rhs) {
+            (Value::Int(a), Value::Int(b)) => Ok(a.cmp(b)),
+            (Value::Float(a), Value::Float(b)) => a
+                .partial_cmp(b)
+                .ok_or_else(|| "Cannot compare NaN values".to_string()),
+            (Value::Int(a), Value::Float(b)) => (*a as f64)
+                .partial_cmp(b)
+                .ok_or_else(|| "Cannot compare NaN values".to_string()),
+            (Value::Float(a), Value::Int(b)) => a
+                .partial_cmp(&(*b as f64))
+                .ok_or_else(|| "Cannot compare NaN values".to_string()),
+            (Value::String(a), Value::String(b)) => Ok(a.cmp(b)),
+            (a, b) => Err(format!("Cannot compare {} and {}", a, b)),
+        }
+    }
 }
