@@ -233,6 +233,122 @@ impl Vm {
                     self.globals[slot] = val;
                 }
 
+                Opcode::Add => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.add(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
+                Opcode::Sub => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.sub(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
+                Opcode::Mul => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.mul(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
+                Opcode::Div => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.div(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
+                Opcode::Mod => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.rem(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
+                Opcode::Neg => {
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.neg().map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
+                Opcode::Not => {
+                    let a = self.pop(chunk, op_ip)?;
+                    self.stack.push(Value::Bool(!a.is_truthy()));
+                }
+
+                Opcode::Eq => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    self.stack.push(Value::Bool(a.equals(&b)));
+                }
+
+                Opcode::NotEq => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    self.stack.push(Value::Bool(!a.equals(&b)));
+                }
+
+                Opcode::Lt => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let ord = a.cmp_ord(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(Value::Bool(ord == Ordering::Less));
+                }
+
+                Opcode::LtEq => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let ord = a.cmp_ord(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(Value::Bool(ord != Ordering::Greater));
+                }
+
+                Opcode::Gt => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let ord = a.cmp_ord(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(Value::Bool(ord == Ordering::Greater));
+                }
+
+                Opcode::GtEq => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let ord = a.cmp_ord(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(Value::Bool(ord != Ordering::Less));
+                }
+
 
                 _ => {}
             }
