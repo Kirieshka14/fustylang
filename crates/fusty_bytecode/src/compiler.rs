@@ -205,5 +205,51 @@ impl Compiler {
         Ok(())
     }
 
+    fn compile_fn(&mut self, fn_decl: &FnDecl) -> Result<(), CompileError> {
+        let saved_locals = std::mem::take(&mut self.locals);
+        let saved_depth = self.scope_depth;
+        let saved_loops = std::mem::take(&mut self.loop_stack);
+        let saved_meow = self.meow_depth;
+
+        self.scope_depth = 1;
+        self.meow_depth = 0;
+
+        for param in &fn_decl.params {
+            self.locals.push(Local {
+                name: param.name.clone(),
+                depth: self.scope_depth,
+                is_mut: param.is_mut,
+            });
+        }
+
+        if fn_decl.is_meow {
+            self.chunk.write_op(Opcode::MeowEnter, fn_decl.span.line);
+            self.meow_depth += 1;
+        }
+
+        for stmt in &fn_decl.body.stmts {
+            self.compile_stmt(stmt)?;
+        }
+
+        if let Some(expr) = &fn_decl.body.expr {
+            self.compile_expr(expr)?;
+        } else {
+            self.chunk.write_op(Opcode::Nil, fn_decl.span.line);
+        }
+
+        if fn_decl.is_meow {
+            self.meow_depth -= 1;
+            self.chunk.write_op(Opcode::MeowExit, fn_decl.span.line);
+        }
+
+        self.chunk.write_op(Opcode::Return, fn_decl.span.line);
+
+        self.locals = saved_locals;
+        self.scope_depth = saved_depth;
+        self.loop_stack = saved_loops;
+        self.meow_depth = saved_meow;
+        Ok(())
+    }
+
 
 }
