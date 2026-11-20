@@ -61,5 +61,50 @@ mod tests {
         assert_eq!(res, VmResult::Done(Value::Nil));
     }
 
+    #[test]
+    fn test_vm_user_functions_and_nested_wait() {
+        let src = r#"
+            fn step_attack(a: i32, b: i32) -> i32 {
+                let sum = a + b;
+                wait 0.25;
+                return sum * 2;
+            }
+
+            let out = step_attack(10, 5);
+            return out;
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Waiting { duration_sec: 0.25 });
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Int(30)));
+    }
+
+    #[test]
+    fn test_vm_control_flow_while_and_short_circuit() {
+        let src = r#"
+            let mut acc = 0;
+            let mut i = 1;
+            while i <= 5 {
+                if i == 3 {
+                    acc += 100;
+                } else if i == 5 || i == 2 {
+                    acc += 10;
+                } else if i > 0 && i < 10 {
+                    acc += 1;
+                }
+                i += 1;
+            }
+            return acc;
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        // i=1 -> +1 (1)
+        // i=2 -> +10 (11)
+        // i=3 -> +100 (111)
+        // i=4 -> +1 (112)
+        // i=5 -> +10 (122)
+        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Int(122)));
+    }
+
 
 }
