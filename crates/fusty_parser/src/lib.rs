@@ -811,8 +811,110 @@ impl Parser {
                 })
             }
 
+            TokenKind::Match => {
+                let value = self.parse_expr()?;
+                self.expect(&TokenKind::LBrace, "'{'")?;
+                let mut arms = Vec::new();
 
-            _ => unreachable!(),
+                while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
+                    let pat_start = self.peek().span;
+                    let pattern = self.parse_pattern()?;
+                    self.expect(&TokenKind::FatArrow, "'=>'")?;
+                    let body = self.parse_expr()?;
+                    let arm_end = body.span().end;
+                    self.match_token(&TokenKind::Comma);
+
+                    arms.push(MatchArm {
+                        pattern,
+                        body,
+                        span: Span::new(pat_start.start, arm_end, pat_start.line, pat_start.col),
+                    });
+                }
+
+                let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
+                let span = Span::new(tok.span.start, end.end, tok.span.line, tok.span.col);
+                Ok(Expr::Match {
+                    value: Box::new(value),
+                    arms,
+                    span,
+                })
+            }
+
+            TokenKind::LParen => {
+                let expr = self.parse_expr()?;
+                self.expect(&TokenKind::RParen, "')'")?;
+                Ok(expr)
+            }
+
+            TokenKind::LBrace => {
+                // Standalone block expression
+                self.cursor -= 1; // back up to parse block properly
+                let block = self.parse_block()?;
+                Ok(Expr::Block(block))
+            }
+
+            _ => Err(ParseError {
+                message: format!("Unexpected token in expression: {:?}", tok.kind),
+                span: tok.span,
+            }),
+        }
+    }
+
+    fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
+        let tok = self.advance();
+        match tok.kind {
+            TokenKind::Underscore => Ok(Pattern::Wildcard),
+            TokenKind::Minus => {
+                let next = self.advance();
+                match next.kind {
+                    TokenKind::IntLit(v) => Ok(Pattern::Literal(Literal::Int(-v))),
+                    TokenKind::FloatLit(v) => Ok(Pattern::Literal(Literal::Float(-v))),
+                    _ => Err(ParseError {
+                        message: format!("Expected number after '-' in pattern, found {:?}", next.kind),
+                        span: next.span,
+                    }),
+                }
+            }
+            TokenKind::IntLit(v) => Ok(Pattern::Literal(Literal::Int(v))),
+            TokenKind::FloatLit(v) => Ok(Pattern::Literal(Literal::Float(v))),
+            TokenKind::StringLit(v) => Ok(Pattern::Literal(Literal::String(v))),
+            TokenKind::True => Ok(Pattern::Literal(Literal::Bool(true))),
+            TokenKind::False => Ok(Pattern::Literal(Literal::Bool(false))),
+            TokenKind::Ident(ident) => {
+                if self.match_token(&TokenKind::DoubleColon) {
+                    let var_tok = self.advance();
+                    let var_name = match var_tok.kind {
+                        TokenKind::Ident(s) => s,
+                        _ => return Err(ParseError { message: "Expected variant name".into(), span: var_tok.span }),
+                    };
+
+                    let mut bindings = Vec::new();
+                    if self.match_token(&TokenKind::LParen) {
+                        while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                            let b_tok = self.advance();
+                            if let TokenKind::Ident(b) = b_tok.kind {
+                                bindings.push(b);
+                            }
+                            if !self.match_token(&TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                        self.expect(&TokenKind::RParen, "')'")?;
+                    }
+
+                    Ok(Pattern::Variant {
+                        enum_name: Some(ident),
+                        variant_name: var_name,
+                        bindings,
+                    })
+                } else {
+                    Ok(Pattern::Ident(ident))
+                }
+            }
+            _ => Err(ParseError {
+                message: format!("Invalid pattern: {:?}", tok.kind),
+                span: tok.span,
+            }),
         }
     }
 }
