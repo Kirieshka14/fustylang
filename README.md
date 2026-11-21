@@ -59,3 +59,8 @@ meow {
 let offset3 = compute_offset(1.5);
 log("pos =", pos, "offset3 =", offset3);
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
