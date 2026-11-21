@@ -426,4 +426,17 @@ mod tests {
         let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
         assert!(kinds.contains(&TokenKind::StringLit("hello fusty".to_string())));
     }
+
+    #[test]
+    fn test_lexer_keywords_and_identifiers() {
+        let mut lexer = Lexer::new("let mut player_hp = 100; yield; return vec3(1.0, 2.0, 3.0);");
+        let tokens = lexer.tokenize().expect("Tokenization failed");
+        let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert!(kinds.contains(&TokenKind::Let));
+        assert!(kinds.contains(&TokenKind::Mut));
+        assert!(kinds.contains(&TokenKind::Yield));
+        assert!(kinds.contains(&TokenKind::Return));
+        assert!(kinds.contains(&TokenKind::Vec3));
+        assert!(kinds.contains(&TokenKind::Ident("player_hp".to_string())));
+    }
 }
