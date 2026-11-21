@@ -401,4 +401,17 @@ mod tests {
         assert!(kinds.contains(&TokenKind::Wait));
         assert!(kinds.contains(&TokenKind::Vec2));
     }
+
+    #[test]
+    fn test_lexer_numbers_and_operators() {
+        let mut lexer = Lexer::new("let x = 42 + 3.14 * 2 - 1 / 5;");
+        let tokens = lexer.tokenize().expect("Tokenization failed");
+        let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert!(kinds.contains(&TokenKind::IntLit(42)));
+        assert!(kinds.contains(&TokenKind::FloatLit(3.14)));
+        assert!(kinds.contains(&TokenKind::Plus));
+        assert!(kinds.contains(&TokenKind::Star));
+        assert!(kinds.contains(&TokenKind::Minus));
+        assert!(kinds.contains(&TokenKind::Slash));
+    }
 }
