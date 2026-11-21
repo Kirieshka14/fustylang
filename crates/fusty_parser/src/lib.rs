@@ -956,4 +956,14 @@ mod tests {
 
         assert_eq!(program.items.len(), 3); // Enum, Struct, Fn
     }
+
+    #[test]
+    fn test_parse_variable_declarations() {
+        let code = "let x = 10; let mut y = 20.5; let v = vec2(1.0, 2.0);";
+        let mut lexer = Lexer::new(code);
+        let tokens = lexer.tokenize().expect("Lex failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse_program().expect("Parse failed");
+        assert_eq!(program.items.len(), 3);
+    }
 }
