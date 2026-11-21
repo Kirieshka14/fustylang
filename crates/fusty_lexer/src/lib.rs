@@ -414,4 +414,16 @@ mod tests {
         assert!(kinds.contains(&TokenKind::Minus));
         assert!(kinds.contains(&TokenKind::Slash));
     }
+
+    #[test]
+    fn test_lexer_strings_and_nested_comments() {
+        let code = r#"
+            /* outer /* inner */ still comment */
+            let msg = "hello fusty";
+        "#;
+        let mut lexer = Lexer::new(code);
+        let tokens = lexer.tokenize().expect("Tokenization failed");
+        let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert!(kinds.contains(&TokenKind::StringLit("hello fusty".to_string())));
+    }
 }
