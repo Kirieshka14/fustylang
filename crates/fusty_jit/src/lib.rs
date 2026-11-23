@@ -1,3 +1,4 @@
+pub mod analyze;
 pub mod asm;
 pub mod memory;
 
