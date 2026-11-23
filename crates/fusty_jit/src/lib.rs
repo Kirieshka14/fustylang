@@ -1,3 +1,4 @@
+pub mod asm;
 pub mod memory;
 
 use std::fmt;
