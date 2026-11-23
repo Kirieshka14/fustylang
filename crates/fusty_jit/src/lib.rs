@@ -1,3 +1,5 @@
+pub mod memory;
+
 use std::fmt;
 
 /// Execution mode for the FustyLang native JIT compiler.
