@@ -2,7 +2,7 @@
 
 All notable changes to FustyLang will be documented in this file.
 
-## [0.3.0] - 2026-11-23
+## [0.2.1] - 2026-11-23
 
 ### Added
 - `uwu` cuddle operator: `a uwu b` is the midpoint of two values (numbers always give a float, `vec2`/`vec3` cuddle component-wise). Binds tighter than comparisons, looser than `+`/`-`. VM-only (JIT falls back cleanly). Mismatched types get a tsundere error.
