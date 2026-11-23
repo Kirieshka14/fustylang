@@ -3,10 +3,26 @@ use std::fs;
 use std::process::ExitCode;
 
 use fusty_bytecode::compiler::Compiler;
+use fusty_jit::JitMode;
 use fusty_lexer::Lexer;
 use fusty_parser::Parser;
 use fusty_vm::value::Value;
 use fusty_vm::vm::{Host, Vm, VmResult};
+
+#[derive(Debug, Clone, Copy)]
+struct RunOptions {
+    jit_mode: JitMode,
+    show_jit_stats: bool,
+}
+
+impl Default for RunOptions {
+    fn default() -> Self {
+        Self {
+            jit_mode: JitMode::default(),
+            show_jit_stats: false,
+        }
+    }
+}
 
 struct CliHost;
 
@@ -95,7 +111,15 @@ impl Host for CliHost {
     }
 }
 
-fn run_source(source: &str, file_name: &str) -> bool {
+fn jit_mode_label(mode: JitMode) -> &'static str {
+    match mode {
+        JitMode::Auto { .. } => "Auto Tiered x86-64 JIT",
+        JitMode::Eager => "Eager x86-64 JIT (--jit)",
+        JitMode::Disabled => "Bytecode VM only (--no-jit)",
+    }
+}
+
+fn run_source(source: &str, file_name: &str, opts: RunOptions) -> bool {
     println!(
         "=== [FustyLang ~nya] Compiling '{}' (it's not like I wanted to or anything!) ===",
         file_name
@@ -141,8 +165,11 @@ fn run_source(source: &str, file_name: &str) -> bool {
         chunk.constants.len()
     );
 
-    println!("\n=== [FustyLang ~nya] Running in Ferrium VM ===");
-    let mut vm = Vm::new();
+    println!(
+        "\n=== [FustyLang ~nya] Running in Ferrium VM [{}] ===",
+        jit_mode_label(opts.jit_mode)
+    );
+    let mut vm = Vm::with_jit_mode(opts.jit_mode);
     let mut host = CliHost;
 
     loop {
@@ -163,6 +190,19 @@ fn run_source(source: &str, file_name: &str) -> bool {
                     "  [DONE ~nya] Hmph... fine, your script finished with result: {}",
                     val
                 );
+                if opts.show_jit_stats {
+                    let s = vm.jit_stats();
+                    println!(
+                        "  [JIT >w<] Compiled {} hot nya-function(s) ({} bytes x86-64), {} native call(s), {} VM fallback(s)",
+                        s.compiled_functions, s.compiled_bytes, s.native_calls, s.vm_fallbacks
+                    );
+                    if !s.compiled_names.is_empty() {
+                        println!(
+                            "  [JIT >w<] Native symbols: {}",
+                            s.compiled_names.join(", ")
+                        );
+                    }
+                }
                 return true;
             }
             Err(e) => {
@@ -173,18 +213,34 @@ fn run_source(source: &str, file_name: &str) -> bool {
     }
 }
 
-fn main() -> ExitCode {
-    let args: Vec<String> = env::args().collect();
-
-    if args.len() > 1 && args[1] == "run" {
-        if args.len() < 3 {
-            eprintln!("B-baka! Usage: fusty run <path_to_script.fy>");
-            return ExitCode::FAILURE;
+fn parse_flags(args: &[String]) -> (RunOptions, Vec<String>) {
+    let mut opts = RunOptions::default();
+    let mut positional = Vec::new();
+    for arg in args {
+        match arg.as_str() {
+            "--jit" => opts.jit_mode = JitMode::Eager,
+            "--no-jit" => opts.jit_mode = JitMode::Disabled,
+            "--jit-stats" => opts.show_jit_stats = true,
+            _ => positional.push(arg.clone()),
         }
-        let path = &args[2];
+    }
+    (opts, positional)
+}
+
+fn main() -> ExitCode {
+    let raw_args: Vec<String> = env::args().skip(1).collect();
+    let (opts, positional) = parse_flags(&raw_args);
+
+    if positional.first().map(|s| s.as_str()) == Some("run") {
+        let Some(path) = positional.get(1) else {
+            eprintln!(
+                "B-baka! Usage: fusty run <path_to_script.fy> [--jit|--no-jit] [--jit-stats]"
+            );
+            return ExitCode::FAILURE;
+        };
         match fs::read_to_string(path) {
             Ok(content) => {
-                if run_source(&content, path) {
+                if run_source(&content, path, opts) {
                     ExitCode::SUCCESS
                 } else {
                     ExitCode::FAILURE
@@ -196,8 +252,12 @@ fn main() -> ExitCode {
             }
         }
     } else {
-        println!("FustyLang (~nya) v0.2.0 — Fast, Tsundere Rust-like Scripting");
-        println!("(Run with `fusty run <file.fy>` or enjoy the built-in combat demo... b-baka!)\n");
+        println!(
+            "FustyLang (~nya) v0.2.0 — Fast, Tsundere Rust-like Scripting + Native x86-64 JIT"
+        );
+        println!(
+            "(Run with `fusty run <file.fy> [--jit|--no-jit] [--jit-stats]` or enjoy the demo... b-baka!)\n"
+        );
 
         let demo_script = r#"
             // Fast Combat & Arena Demo (~nya edition)
@@ -225,7 +285,7 @@ fn main() -> ExitCode {
             return player_pos;
         "#;
 
-        if run_source(demo_script, "<embedded demo>") {
+        if run_source(demo_script, "<embedded demo>", opts) {
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE

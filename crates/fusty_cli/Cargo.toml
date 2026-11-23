@@ -7,4 +7,5 @@ edition = "2021"
 fusty_lexer = { path = "../fusty_lexer" }
 fusty_parser = { path = "../fusty_parser" }
 fusty_bytecode = { path = "../fusty_bytecode" }
+fusty_jit = { path = "../fusty_jit" }
 fusty_vm = { path = "../fusty_vm" }
