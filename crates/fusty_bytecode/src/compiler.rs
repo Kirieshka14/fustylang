@@ -297,7 +297,11 @@ impl Compiler {
                 }
             }
 
-            Stmt::Assign { target, value, span } => {
+            Stmt::Assign {
+                target,
+                value,
+                span,
+            } => {
                 let line = span.line;
                 match target {
                     Expr::Ident(name, _) => {
@@ -342,8 +346,9 @@ impl Compiler {
                     } => {
                         let Expr::Ident(name, _) = inner.as_ref() else {
                             return Err(CompileError {
-                                message: "Field assignment target must be a variable (e.g. `v.x = ...`)"
-                                    .into(),
+                                message:
+                                    "Field assignment target must be a variable (e.g. `v.x = ...`)"
+                                        .into(),
                             });
                         };
                         let set_op = match field.as_str() {
@@ -445,7 +450,8 @@ impl Compiler {
                     } => {
                         let Expr::Ident(name, _) = inner.as_ref() else {
                             return Err(CompileError {
-                                message: "Compound field assignment target must be a variable".into(),
+                                message: "Compound field assignment target must be a variable"
+                                    .into(),
                             });
                         };
                         let (get_field_op, set_field_op) = match field.as_str() {
@@ -492,8 +498,9 @@ impl Compiler {
                     }
                     _ => {
                         return Err(CompileError {
-                            message: "Compound assignment target must be a variable or vector field"
-                                .into(),
+                            message:
+                                "Compound assignment target must be a variable or vector field"
+                                    .into(),
                         });
                     }
                 }
@@ -601,23 +608,21 @@ impl Compiler {
         match expr {
             Expr::Literal(lit, _) => self.compile_literal(lit, line)?,
 
-            Expr::Ident(name, _) => {
-                match self.resolve_var(name) {
-                    Some(VarBinding::Local { slot, .. }) => {
-                        self.chunk.write_op(Opcode::GetLocal, line);
-                        self.chunk.write_u16(slot, line);
-                    }
-                    Some(VarBinding::Global { slot, .. }) => {
-                        self.chunk.write_op(Opcode::GetGlobal, line);
-                        self.chunk.write_u16(slot, line);
-                    }
-                    None => {
-                        return Err(CompileError {
-                            message: format!("Undefined variable '{}'", name),
-                        });
-                    }
+            Expr::Ident(name, _) => match self.resolve_var(name) {
+                Some(VarBinding::Local { slot, .. }) => {
+                    self.chunk.write_op(Opcode::GetLocal, line);
+                    self.chunk.write_u16(slot, line);
                 }
-            }
+                Some(VarBinding::Global { slot, .. }) => {
+                    self.chunk.write_op(Opcode::GetGlobal, line);
+                    self.chunk.write_u16(slot, line);
+                }
+                None => {
+                    return Err(CompileError {
+                        message: format!("Undefined variable '{}'", name),
+                    });
+                }
+            },
 
             Expr::Vec2 { x, y, .. } => {
                 self.compile_expr(x)?;

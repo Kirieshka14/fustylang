@@ -198,7 +198,7 @@ pub struct Param {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDecl {
     pub name: String,
-    pub is_meow: bool, // `meow fn ...`
+    pub is_meow: bool, // `meow nya ...`
     pub params: Vec<Param>,
     pub return_ty: Option<Type>,
     pub body: Block,

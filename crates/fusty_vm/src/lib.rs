@@ -1,11 +1,11 @@
-pub mod vm;
 pub mod arena;
 pub mod value;
+pub mod vm;
 
 #[cfg(test)]
 mod tests {
-    use super::vm::*;
     use super::value::*;
+    use super::vm::*;
     use fusty_bytecode::chunk::{Chunk, Constant};
     use fusty_bytecode::compiler::Compiler;
     use fusty_bytecode::opcode::Opcode;
@@ -15,7 +15,9 @@ mod tests {
     fn compile_src(src: &str) -> Chunk {
         let tokens = Lexer::new(src).tokenize().expect("lex failed");
         let program = Parser::new(tokens).parse_program().expect("parse failed");
-        Compiler::new().compile_program(&program).expect("compile failed")
+        Compiler::new()
+            .compile_program(&program)
+            .expect("compile failed")
     }
 
     #[test]
@@ -64,7 +66,7 @@ mod tests {
     #[test]
     fn test_vm_user_functions_and_nested_wait() {
         let src = r#"
-            fn step_attack(a: i32, b: i32) -> i32 {
+            nya step_attack(a: i32, b: i32) -> i32 {
                 let sum = a + b;
                 wait 0.25;
                 return sum * 2;
@@ -75,7 +77,10 @@ mod tests {
         "#;
         let chunk = compile_src(src);
         let mut vm = Vm::new();
-        assert_eq!(vm.run(&chunk).unwrap(), VmResult::Waiting { duration_sec: 0.25 });
+        assert_eq!(
+            vm.run(&chunk).unwrap(),
+            VmResult::Waiting { duration_sec: 0.25 }
+        );
         assert_eq!(vm.run(&chunk).unwrap(), VmResult::Done(Value::Int(30)));
     }
 
@@ -138,11 +143,13 @@ mod tests {
         assert!(vm.run_with_host(&safe_fail, &mut host).is_err());
         assert_eq!(host.teleports, 0);
 
-        let meow_ok = compile_src(r#"
+        let meow_ok = compile_src(
+            r#"
             meow {
                 raw_teleport(vec2(10.0, 20.0));
             }
-        "#);
+        "#,
+        );
         let mut vm2 = Vm::new();
         assert_eq!(
             vm2.run_with_host(&meow_ok, &mut host).unwrap(),
@@ -156,7 +163,9 @@ mod tests {
         let chunk = compile_src("while true { let x = 1; }");
         let mut vm = Vm::new();
         let mut host = NoopHost;
-        let err = vm.run_with_host_budget(&chunk, &mut host, 1_000).unwrap_err();
+        let err = vm
+            .run_with_host_budget(&chunk, &mut host, 1_000)
+            .unwrap_err();
         assert!(err.message.contains("budget exceeded"));
     }
 
@@ -166,7 +175,7 @@ mod tests {
             let speed = 4.0;
             let mut counter = 0;
 
-            fn bump(v: f64) -> f64 {
+            nya bump(v: f64) -> f64 {
                 counter += 1;
                 v * speed
             }
@@ -208,7 +217,7 @@ mod tests {
     #[test]
     fn test_if_else_if_block_and_match_expressions() {
         let src = r#"
-            fn classify(n: i32) -> i32 {
+            nya classify(n: i32) -> i32 {
                 let base = if n < 0 {
                     -10
                 } else if n == 0 {
@@ -285,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_call_stack_overflow_and_lexer_unterminated_comment() {
-        let rec = compile_src("fn boom() { boom(); } boom();");
+        let rec = compile_src("nya boom() { boom(); } boom();");
         let mut vm = Vm::new();
         let err = vm.run(&rec).unwrap_err();
         assert!(err.message.contains("Call stack overflow"));

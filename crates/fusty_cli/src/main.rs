@@ -86,11 +86,17 @@ fn run_source(source: &str, file_name: &str) -> bool {
     let program = match parser.parse_program() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("Parser error at {}:{}: {}", e.span.line, e.span.col, e.message);
+            eprintln!(
+                "Parser error at {}:{}: {}",
+                e.span.line, e.span.col, e.message
+            );
             return false;
         }
     };
-    println!("  [2/3] Parsed AST: {} top-level items.", program.items.len());
+    println!(
+        "  [2/3] Parsed AST: {} top-level items.",
+        program.items.len()
+    );
 
     let compiler = Compiler::new();
     let chunk = match compiler.compile_program(&program) {
@@ -124,7 +130,10 @@ fn run_source(source: &str, file_name: &str) -> bool {
                 vm.reset_frame();
             }
             Ok(VmResult::Done(val)) => {
-                println!("  [DONE] Script completed successfully with result: {}", val);
+                println!(
+                    "  [DONE] Script completed successfully with result: {}",
+                    val
+                );
                 return true;
             }
             Err(e) => {

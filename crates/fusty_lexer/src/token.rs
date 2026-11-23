@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
-    Fn,
+    Nya, // Function declaration: `nya foo() { ... }`
     Let,
     Mut,
     Struct,
@@ -16,8 +16,8 @@ pub enum TokenKind {
     Return,
     Break,
     Continue,
-    Meow,   // The iconic safety bypass: `meow { ... }` or `meow fn ...`
-    Wait,   // Game coroutine pause: `wait 0.2;`
+    Meow, // The iconic safety bypass: `meow { ... }` or `meow nya ...`
+    Wait, // Game coroutine pause: `wait 0.2;`
     Yield,
     Spawn,
     True,
@@ -44,34 +44,34 @@ pub enum TokenKind {
     RBracket, // ]
 
     // Operators & Punctuation
-    Comma,      // ,
-    Colon,      // :
-    DoubleColon,// ::
-    Semicolon,  // ;
-    Dot,        // .
-    Arrow,      // ->
-    FatArrow,   // =>
-    Plus,       // +
-    Minus,      // -
-    Star,       // *
-    Slash,      // /
-    Percent,    // %
-    Assign,     // =
-    PlusAssign, // +=
-    MinusAssign,// -=
-    StarAssign, // *=
-    SlashAssign,// /=
-    Eq,         // ==
-    NotEq,      // !=
-    Lt,         // <
-    LtEq,       // <=
-    Gt,         // >
-    GtEq,       // >=
-    And,        // &&
-    Or,         // ||
-    Bang,       // !
-    Underscore, // _
-    Question,   // ?
+    Comma,       // ,
+    Colon,       // :
+    DoubleColon, // ::
+    Semicolon,   // ;
+    Dot,         // .
+    Arrow,       // ->
+    FatArrow,    // =>
+    Plus,        // +
+    Minus,       // -
+    Star,        // *
+    Slash,       // /
+    Percent,     // %
+    Assign,      // =
+    PlusAssign,  // +=
+    MinusAssign, // -=
+    StarAssign,  // *=
+    SlashAssign, // /=
+    Eq,          // ==
+    NotEq,       // !=
+    Lt,          // <
+    LtEq,        // <=
+    Gt,          // >
+    GtEq,        // >=
+    And,         // &&
+    Or,          // ||
+    Bang,        // !
+    Underscore,  // _
+    Question,    // ?
 
     // Special
     Eof,
@@ -87,7 +87,12 @@ pub struct Span {
 
 impl Span {
     pub fn new(start: usize, end: usize, line: usize, col: usize) -> Self {
-        Self { start, end, line, col }
+        Self {
+            start,
+            end,
+            line,
+            col,
+        }
     }
 }
 

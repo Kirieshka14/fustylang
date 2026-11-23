@@ -1,3 +1,3 @@
-pub mod opcode;
 pub mod chunk;
 pub mod compiler;
+pub mod opcode;

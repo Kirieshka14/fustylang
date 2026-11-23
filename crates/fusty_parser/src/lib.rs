@@ -23,9 +23,9 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        self.tokens.get(self.cursor).unwrap_or_else(|| {
-            self.tokens.last().expect("Tokens should not be empty")
-        })
+        self.tokens
+            .get(self.cursor)
+            .unwrap_or_else(|| self.tokens.last().expect("Tokens should not be empty"))
     }
 
     fn peek_kind(&self) -> &TokenKind {
@@ -80,7 +80,7 @@ impl Parser {
     }
 
     pub fn parse_item(&mut self) -> Result<Item, ParseError> {
-        if self.check(&TokenKind::Meow) && self.peek_next_kind() == Some(&TokenKind::Fn) {
+        if self.check(&TokenKind::Meow) && self.peek_next_kind() == Some(&TokenKind::Nya) {
             self.advance(); // consume `meow`
             let mut func = self.parse_fn()?;
             func.is_meow = true;
@@ -88,7 +88,7 @@ impl Parser {
         }
 
         match self.peek_kind() {
-            TokenKind::Fn => Ok(Item::Fn(self.parse_fn()?)),
+            TokenKind::Nya => Ok(Item::Fn(self.parse_fn()?)),
             TokenKind::Struct => Ok(Item::Struct(self.parse_struct()?)),
             TokenKind::Enum => Ok(Item::Enum(self.parse_enum()?)),
             TokenKind::Impl => Ok(Item::Impl(self.parse_impl()?)),
@@ -97,7 +97,7 @@ impl Parser {
     }
 
     fn parse_fn(&mut self) -> Result<FnDecl, ParseError> {
-        let start = self.expect(&TokenKind::Fn, "'fn'")?.span;
+        let start = self.expect(&TokenKind::Nya, "'nya'")?.span;
         let name = match self.peek_kind() {
             TokenKind::Ident(_) => {
                 if let TokenKind::Ident(s) = self.advance().kind {
@@ -291,7 +291,7 @@ impl Parser {
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.check(&TokenKind::Eof) {
-            if self.check(&TokenKind::Meow) && self.peek_next_kind() == Some(&TokenKind::Fn) {
+            if self.check(&TokenKind::Meow) && self.peek_next_kind() == Some(&TokenKind::Nya) {
                 self.advance();
                 let mut func = self.parse_fn()?;
                 func.is_meow = true;
@@ -365,12 +365,26 @@ impl Parser {
         if let Some(compound_op) = assign_op {
             let val = self.parse_expr()?;
             let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
-            let span = Span::new(expr.span().start, end.end, expr.span().line, expr.span().col);
+            let span = Span::new(
+                expr.span().start,
+                end.end,
+                expr.span().line,
+                expr.span().col,
+            );
 
             if let Some(op) = compound_op {
-                Ok(Stmt::CompoundAssign { target: expr, op, value: val, span })
+                Ok(Stmt::CompoundAssign {
+                    target: expr,
+                    op,
+                    value: val,
+                    span,
+                })
             } else {
-                Ok(Stmt::Assign { target: expr, value: val, span })
+                Ok(Stmt::Assign {
+                    target: expr,
+                    value: val,
+                    span,
+                })
             }
         } else {
             self.match_token(&TokenKind::Semicolon);
@@ -381,19 +395,34 @@ impl Parser {
     fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.expect(&TokenKind::Break, "'break'")?.span;
         let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
-        Ok(Stmt::Break(Span::new(start.start, end.end, start.line, start.col)))
+        Ok(Stmt::Break(Span::new(
+            start.start,
+            end.end,
+            start.line,
+            start.col,
+        )))
     }
 
     fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.expect(&TokenKind::Continue, "'continue'")?.span;
         let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
-        Ok(Stmt::Continue(Span::new(start.start, end.end, start.line, start.col)))
+        Ok(Stmt::Continue(Span::new(
+            start.start,
+            end.end,
+            start.line,
+            start.col,
+        )))
     }
 
     fn parse_yield_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.expect(&TokenKind::Yield, "'yield'")?.span;
         let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
-        Ok(Stmt::Yield(Span::new(start.start, end.end, start.line, start.col)))
+        Ok(Stmt::Yield(Span::new(
+            start.start,
+            end.end,
+            start.line,
+            start.col,
+        )))
     }
 
     fn parse_let_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -446,7 +475,10 @@ impl Parser {
             None
         };
         let end = self.expect(&TokenKind::Semicolon, "';'")?.span;
-        Ok(Stmt::Return(val, Span::new(start.start, end.end, start.line, start.col)))
+        Ok(Stmt::Return(
+            val,
+            Span::new(start.start, end.end, start.line, start.col),
+        ))
     }
 
     fn parse_while_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -524,7 +556,12 @@ impl Parser {
         let mut left = self.parse_and()?;
         while self.match_token(&TokenKind::Or) {
             let right = self.parse_and()?;
-            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
             left = Expr::Binary {
                 left: Box::new(left),
                 op: BinOp::Or,
@@ -539,7 +576,12 @@ impl Parser {
         let mut left = self.parse_equality()?;
         while self.match_token(&TokenKind::And) {
             let right = self.parse_equality()?;
-            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
             left = Expr::Binary {
                 left: Box::new(left),
                 op: BinOp::And,
@@ -561,7 +603,12 @@ impl Parser {
                 break;
             };
             let right = self.parse_comparison()?;
-            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
             left = Expr::Binary {
                 left: Box::new(left),
                 op,
@@ -587,7 +634,12 @@ impl Parser {
                 break;
             };
             let right = self.parse_term()?;
-            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
             left = Expr::Binary {
                 left: Box::new(left),
                 op,
@@ -609,7 +661,12 @@ impl Parser {
                 break;
             };
             let right = self.parse_factor()?;
-            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
             left = Expr::Binary {
                 left: Box::new(left),
                 op,
@@ -633,7 +690,12 @@ impl Parser {
                 break;
             };
             let right = self.parse_unary()?;
-            let span = Span::new(left.span().start, right.span().end, left.span().line, left.span().col);
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
             left = Expr::Binary {
                 left: Box::new(left),
                 op,
@@ -682,7 +744,12 @@ impl Parser {
                     }
                 }
                 let end = self.expect(&TokenKind::RParen, "')'")?.span;
-                let span = Span::new(expr.span().start, end.end, expr.span().line, expr.span().col);
+                let span = Span::new(
+                    expr.span().start,
+                    end.end,
+                    expr.span().line,
+                    expr.span().col,
+                );
                 expr = Expr::Call {
                     callee: Box::new(expr),
                     args,
@@ -710,7 +777,12 @@ impl Parser {
                         }
                     }
                     let end = self.expect(&TokenKind::RParen, "')'")?.span;
-                    let span = Span::new(expr.span().start, end.end, expr.span().line, expr.span().col);
+                    let span = Span::new(
+                        expr.span().start,
+                        end.end,
+                        expr.span().line,
+                        expr.span().col,
+                    );
                     expr = Expr::MethodCall {
                         target: Box::new(expr),
                         method: member_name,
@@ -719,7 +791,12 @@ impl Parser {
                     };
                 } else {
                     // Field access
-                    let span = Span::new(expr.span().start, member_tok.span.end, expr.span().line, expr.span().col);
+                    let span = Span::new(
+                        expr.span().start,
+                        member_tok.span.end,
+                        expr.span().line,
+                        expr.span().col,
+                    );
                     expr = Expr::FieldAccess {
                         target: Box::new(expr),
                         field: member_name,
@@ -801,7 +878,10 @@ impl Parser {
                 } else {
                     None
                 };
-                let end_span = else_branch.as_ref().map(|b| b.span).unwrap_or(then_branch.span);
+                let end_span = else_branch
+                    .as_ref()
+                    .map(|b| b.span)
+                    .unwrap_or(then_branch.span);
                 let span = Span::new(tok.span.start, end_span.end, tok.span.line, tok.span.col);
                 Ok(Expr::If {
                     cond: Box::new(cond),
@@ -870,7 +950,10 @@ impl Parser {
                     TokenKind::IntLit(v) => Ok(Pattern::Literal(Literal::Int(-v))),
                     TokenKind::FloatLit(v) => Ok(Pattern::Literal(Literal::Float(-v))),
                     _ => Err(ParseError {
-                        message: format!("Expected number after '-' in pattern, found {:?}", next.kind),
+                        message: format!(
+                            "Expected number after '-' in pattern, found {:?}",
+                            next.kind
+                        ),
                         span: next.span,
                     }),
                 }
@@ -885,7 +968,12 @@ impl Parser {
                     let var_tok = self.advance();
                     let var_name = match var_tok.kind {
                         TokenKind::Ident(s) => s,
-                        _ => return Err(ParseError { message: "Expected variant name".into(), span: var_tok.span }),
+                        _ => {
+                            return Err(ParseError {
+                                message: "Expected variant name".into(),
+                                span: var_tok.span,
+                            })
+                        }
                     };
 
                     let mut bindings = Vec::new();
@@ -937,7 +1025,7 @@ mod tests {
                 pos: vec2,
             }
 
-            fn update_boss(mut self, dt: f32) {
+            nya update_boss(mut self, dt: f32) {
                 let move_vec = vec2(10.0, 20.0);
                 self.pos += move_vec * dt;
 

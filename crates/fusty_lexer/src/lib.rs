@@ -44,7 +44,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn current_pos(&self) -> usize {
-        self.chars.get(self.cursor).map(|&(i, _)| i).unwrap_or(self.input.len())
+        self.chars
+            .get(self.cursor)
+            .map(|&(i, _)| i)
+            .unwrap_or(self.input.len())
     }
 
     fn current_col(&self) -> usize {
@@ -254,7 +257,8 @@ impl<'a> Lexer<'a> {
                                 self.advance();
                             }
                             None => {
-                                let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
+                                let span =
+                                    Span::new(start_pos, self.current_pos(), start_line, start_col);
                                 return Err(("Unterminated multi-line comment".into(), span));
                             }
                         }
@@ -266,7 +270,12 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn lex_string(&mut self, start_pos: usize, line: usize, col: usize) -> Result<TokenKind, (String, Span)> {
+    fn lex_string(
+        &mut self,
+        start_pos: usize,
+        line: usize,
+        col: usize,
+    ) -> Result<TokenKind, (String, Span)> {
         let mut s = String::new();
         loop {
             match self.advance() {
@@ -293,7 +302,13 @@ impl<'a> Lexer<'a> {
         Ok(TokenKind::StringLit(s))
     }
 
-    fn lex_number(&mut self, first_char: char, start_pos: usize, line: usize, col: usize) -> Result<TokenKind, (String, Span)> {
+    fn lex_number(
+        &mut self,
+        first_char: char,
+        start_pos: usize,
+        line: usize,
+        col: usize,
+    ) -> Result<TokenKind, (String, Span)> {
         let mut num_str = String::new();
         num_str.push(first_char);
         let mut is_float = false;
@@ -304,7 +319,13 @@ impl<'a> Lexer<'a> {
                     num_str.push(c);
                 }
                 self.advance();
-            } else if !is_float && c == '.' && self.peek_next().map(|n| n.is_ascii_digit()).unwrap_or(false) {
+            } else if !is_float
+                && c == '.'
+                && self
+                    .peek_next()
+                    .map(|n| n.is_ascii_digit())
+                    .unwrap_or(false)
+            {
                 is_float = true;
                 num_str.push(c);
                 self.advance(); // consume '.'
@@ -332,7 +353,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_ident(&mut self, first_char: char, _start_pos: usize, _line: usize, _col: usize) -> TokenKind {
+    fn lex_ident(
+        &mut self,
+        first_char: char,
+        _start_pos: usize,
+        _line: usize,
+        _col: usize,
+    ) -> TokenKind {
         let mut ident = String::new();
         ident.push(first_char);
 
@@ -346,7 +373,7 @@ impl<'a> Lexer<'a> {
         }
 
         match ident.as_str() {
-            "fn" => TokenKind::Fn,
+            "nya" => TokenKind::Nya,
             "let" => TokenKind::Let,
             "mut" => TokenKind::Mut,
             "struct" => TokenKind::Struct,
@@ -361,8 +388,8 @@ impl<'a> Lexer<'a> {
             "return" => TokenKind::Return,
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
-            "meow" => TokenKind::Meow,     // Unsafe replacement!
-            "wait" => TokenKind::Wait,     // Coroutine sleep!
+            "meow" => TokenKind::Meow, // Unsafe replacement!
+            "wait" => TokenKind::Wait, // Coroutine sleep!
             "yield" => TokenKind::Yield,
             "spawn" => TokenKind::Spawn,
             "true" => TokenKind::True,
@@ -385,7 +412,7 @@ mod tests {
     fn test_lexer_meow_and_vec2() {
         let code = r#"
             // Game combat script
-            fn update(mut self, dt: f32) {
+            nya update(mut self, dt: f32) {
                 let v = vec2(10.0, 20.0);
                 wait 0.2;
                 meow {
@@ -395,8 +422,9 @@ mod tests {
         "#;
         let mut lexer = Lexer::new(code);
         let tokens = lexer.tokenize().expect("Tokenization failed");
-        
+
         let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert!(kinds.contains(&TokenKind::Nya));
         assert!(kinds.contains(&TokenKind::Meow));
         assert!(kinds.contains(&TokenKind::Wait));
         assert!(kinds.contains(&TokenKind::Vec2));

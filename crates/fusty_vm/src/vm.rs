@@ -6,12 +6,8 @@ use fusty_bytecode::chunk::{Chunk, Constant};
 use fusty_bytecode::opcode::Opcode;
 
 pub trait Host {
-    fn call_native(
-        &mut self,
-        name: &str,
-        args: &[Value],
-        meow_mode: bool,
-    ) -> Result<Value, String>;
+    fn call_native(&mut self, name: &str, args: &[Value], meow_mode: bool)
+        -> Result<Value, String>;
 }
 
 pub struct NoopHost;
@@ -426,7 +422,10 @@ impl Vm {
                     }
                     (b, a) => {
                         return Err(VmError {
-                            message: format!("Expected vec3 operands for .cross, got {} and {}", a, b),
+                            message: format!(
+                                "Expected vec3 operands for .cross, got {} and {}",
+                                a, b
+                            ),
                             line: line_at(chunk, op_ip),
                         })
                     }
@@ -477,7 +476,10 @@ impl Vm {
                         }
                         other => {
                             return Err(VmError {
-                                message: format!("Expected vector for .x assignment, got {:?}", other),
+                                message: format!(
+                                    "Expected vector for .x assignment, got {:?}",
+                                    other
+                                ),
                                 line: line_at(chunk, op_ip),
                             })
                         }
@@ -497,7 +499,10 @@ impl Vm {
                         }
                         other => {
                             return Err(VmError {
-                                message: format!("Expected vector for .y assignment, got {:?}", other),
+                                message: format!(
+                                    "Expected vector for .y assignment, got {:?}",
+                                    other
+                                ),
                                 line: line_at(chunk, op_ip),
                             })
                         }
@@ -513,7 +518,10 @@ impl Vm {
                         }
                         other => {
                             return Err(VmError {
-                                message: format!("Expected vec3 for .z assignment, got {:?}", other),
+                                message: format!(
+                                    "Expected vec3 for .z assignment, got {:?}",
+                                    other
+                                ),
                                 line: line_at(chunk, op_ip),
                             })
                         }
@@ -563,7 +571,10 @@ impl Vm {
                         Value::Int(i) => i as f64,
                         other => {
                             return Err(VmError {
-                                message: format!("Wait expects float/int duration, got {:?}", other),
+                                message: format!(
+                                    "Wait expects float/int duration, got {:?}",
+                                    other
+                                ),
                                 line: line_at(chunk, op_ip),
                             })
                         }
