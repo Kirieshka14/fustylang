@@ -65,7 +65,10 @@ impl Parser {
         } else {
             let tok = self.peek();
             Err(ParseError {
-                message: format!("Expected {}, found {:?}", msg, tok.kind),
+                message: format!(
+                    "B-baka! I expected {}, not {:?}! It's not like I'm going to fix it for you... >///<",
+                    msg, tok.kind
+                ),
                 span: tok.span,
             })
         }
@@ -98,21 +101,22 @@ impl Parser {
 
     fn parse_fn(&mut self) -> Result<FnDecl, ParseError> {
         let start = self.expect(&TokenKind::Nya, "'nya'")?.span;
-        let name = match self.peek_kind() {
-            TokenKind::Ident(_) => {
-                if let TokenKind::Ident(s) = self.advance().kind {
-                    s
-                } else {
-                    unreachable!()
+        let name =
+            match self.peek_kind() {
+                TokenKind::Ident(_) => {
+                    if let TokenKind::Ident(s) = self.advance().kind {
+                        s
+                    } else {
+                        unreachable!()
+                    }
                 }
-            }
-            _ => {
-                return Err(ParseError {
-                    message: "Expected function name".into(),
+                _ => return Err(ParseError {
+                    message:
+                        "B-baka! You forgot to name your 'nya' function! Don't make me guess! >///<"
+                            .into(),
                     span: self.peek().span,
-                })
-            }
-        };
+                }),
+            };
 
         self.expect(&TokenKind::LParen, "'('")?;
         let mut params = Vec::new();
@@ -123,16 +127,17 @@ impl Parser {
             }
 
             let param_tok = self.advance();
-            let param_name = match param_tok.kind {
-                TokenKind::SelfValue => "self".to_string(),
-                TokenKind::Ident(s) => s,
-                _ => {
-                    return Err(ParseError {
-                        message: "Expected parameter name or 'self'".into(),
+            let param_name =
+                match param_tok.kind {
+                    TokenKind::SelfValue => "self".to_string(),
+                    TokenKind::Ident(s) => s,
+                    _ => return Err(ParseError {
+                        message:
+                            "B-baka! Expected a parameter name or 'self', not whatever that is! >.<"
+                                .into(),
                         span: param_tok.span,
-                    })
-                }
-            };
+                    }),
+                };
 
             let ty = if self.match_token(&TokenKind::Colon) {
                 Some(self.parse_type()?)
@@ -860,6 +865,20 @@ impl Parser {
                 Ok(Expr::MeowBlock { block, span })
             }
 
+            TokenKind::Baka => {
+                // `baka!("message")` or `baka!()`
+                self.expect(&TokenKind::Bang, "'!' after 'baka'")?;
+                self.expect(&TokenKind::LParen, "'(' after 'baka!'")?;
+                let message = if !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                    Some(Box::new(self.parse_expr()?))
+                } else {
+                    None
+                };
+                let end = self.expect(&TokenKind::RParen, "')'")?.span;
+                let span = Span::new(tok.span.start, end.end, tok.span.line, tok.span.col);
+                Ok(Expr::Baka { message, span })
+            }
+
             TokenKind::If => {
                 let cond = self.parse_expr()?;
                 let then_branch = self.parse_block()?;
@@ -1053,5 +1072,24 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().expect("Parse failed");
         assert_eq!(program.items.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_baka_and_tsundere_error() {
+        let code = r#"
+            nya check_hp(hp: i64) {
+                if hp <= 0 {
+                    baka!("no more headpats left");
+                }
+                baka!();
+            }
+        "#;
+        let tokens = Lexer::new(code).tokenize().expect("Lex failed");
+        let program = Parser::new(tokens).parse_program().expect("Parse failed");
+        assert_eq!(program.items.len(), 1);
+
+        let bad_tokens = Lexer::new("nya broken( {}").tokenize().expect("Lex failed");
+        let err = Parser::new(bad_tokens).parse_program().unwrap_err();
+        assert!(err.message.contains("B-baka!"));
     }
 }

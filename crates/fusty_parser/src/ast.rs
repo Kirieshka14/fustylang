@@ -132,6 +132,10 @@ pub enum Expr {
         duration: Box<Expr>,
         span: Span,
     },
+    Baka {
+        message: Option<Box<Expr>>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -151,6 +155,7 @@ impl Expr {
             Expr::Match { span, .. } => *span,
             Expr::MeowBlock { span, .. } => *span,
             Expr::Wait { span, .. } => *span,
+            Expr::Baka { span, .. } => *span,
         }
     }
 }

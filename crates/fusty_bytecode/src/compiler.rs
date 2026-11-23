@@ -943,6 +943,11 @@ impl Compiler {
                 }
                 self.end_scope_keeping_top(span.line)?;
             }
+            Expr::Baka { .. } => {
+                return Err(CompileError {
+                    message: "B-baka! Bytecode lowering for baka! isn't wired up yet! >.<".into(),
+                });
+            }
         }
         Ok(())
     }
