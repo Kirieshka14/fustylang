@@ -1,6 +1,7 @@
 pub mod analyze;
 pub mod asm;
 pub mod compiler;
+pub mod engine;
 pub mod memory;
 
 use std::fmt;
@@ -23,7 +24,7 @@ impl Default for JitMode {
 }
 
 /// Scalar type specialized by a native JIT-compiled function.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JitValueKind {
     Int64,
     Float64,
