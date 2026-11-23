@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::process::ExitCode;
+use std::time::Instant;
 
 use fusty_bytecode::compiler::Compiler;
 use fusty_jit::JitMode;
@@ -213,6 +214,93 @@ fn run_source(source: &str, file_name: &str, opts: RunOptions) -> bool {
     }
 }
 
+fn execute_silent(
+    chunk: &fusty_bytecode::chunk::Chunk,
+    mode: JitMode,
+) -> Result<(Value, fusty_jit::JitStats), String> {
+    let mut vm = Vm::with_jit_mode(mode);
+    let mut host = CliHost;
+    loop {
+        match vm.run_with_host_budget(chunk, &mut host, 50_000_000) {
+            Ok(VmResult::Waiting { .. } | VmResult::Yielded) => vm.reset_frame(),
+            Ok(VmResult::Done(val)) => return Ok((val, vm.jit_stats().clone())),
+            Err(e) => return Err(format!("Line {}: {}", e.line, e.message)),
+        }
+    }
+}
+
+fn bench_source(source: &str, file_name: &str) -> bool {
+    println!("=== [FustyLang ~nya] Benchmarking '{}' ===", file_name);
+    let tokens = match Lexer::new(source).tokenize() {
+        Ok(t) => t,
+        Err((err, span)) => {
+            eprintln!("  [LEXER BAKA! >///<] {}:{}: {}", span.line, span.col, err);
+            return false;
+        }
+    };
+    let program = match Parser::new(tokens).parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "  [PARSER BAKA! >///<] {}:{}: {}",
+                e.span.line, e.span.col, e.message
+            );
+            return false;
+        }
+    };
+    let chunk = match Compiler::new().compile_program(&program) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  [COMPILER BAKA! >.<] {}", e.message);
+            return false;
+        }
+    };
+
+    let t0 = Instant::now();
+    let (vm_val, _) = match execute_silent(&chunk, JitMode::Disabled) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("  [VM ERROR] {}", e);
+            return false;
+        }
+    };
+    let vm_dur = t0.elapsed();
+
+    let t1 = Instant::now();
+    let (jit_val, jit_stats) = match execute_silent(&chunk, JitMode::Eager) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("  [JIT ERROR] {}", e);
+            return false;
+        }
+    };
+    let jit_dur = t1.elapsed();
+
+    if vm_val != jit_val {
+        eprintln!(
+            "  [BAKA! >///<] Result mismatch! VM={} vs JIT={}",
+            vm_val, jit_val
+        );
+        return false;
+    }
+
+    let vm_ms = vm_dur.as_secs_f64() * 1000.0;
+    let jit_ms = jit_dur.as_secs_f64() * 1000.0;
+    let speedup = if jit_ms > 0.0 { vm_ms / jit_ms } else { 1.0 };
+
+    println!("  Result:      {}", jit_val);
+    println!("  VM (no-jit): {:>8.3} ms", vm_ms);
+    println!(
+        "  JIT (x86-64):{:>8.3} ms ({} compiled, {} native calls, {} bytes)",
+        jit_ms, jit_stats.compiled_functions, jit_stats.native_calls, jit_stats.compiled_bytes
+    );
+    println!(
+        "  Speedup:     {:.2}x  (H-hmph! Don't get used to me running this fast for you... >///<)",
+        speedup
+    );
+    true
+}
+
 fn parse_flags(args: &[String]) -> (RunOptions, Vec<String>) {
     let mut opts = RunOptions::default();
     let mut positional = Vec::new();
@@ -251,12 +339,30 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+    } else if positional.first().map(|s| s.as_str()) == Some("bench") {
+        let Some(path) = positional.get(1) else {
+            eprintln!("B-baka! Usage: fusty bench <path_to_script.fy>");
+            return ExitCode::FAILURE;
+        };
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                if bench_source(&content, path) {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(e) => {
+                eprintln!("Hmph! Couldn't read '{}', dummy! ({}) >.<", path, e);
+                ExitCode::FAILURE
+            }
+        }
     } else {
         println!(
             "FustyLang (~nya) v0.2.0 — Fast, Tsundere Rust-like Scripting + Native x86-64 JIT"
         );
         println!(
-            "(Run with `fusty run <file.fy> [--jit|--no-jit] [--jit-stats]` or enjoy the demo... b-baka!)\n"
+            "(Run with `fusty run <file.fy> [--jit|--no-jit] [--jit-stats]` or `fusty bench <file.fy>`... b-baka!)\n"
         );
 
         let demo_script = r#"
