@@ -419,6 +419,7 @@ impl<'a> Lexer<'a> {
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
             "meow" => TokenKind::Meow, // Unsafe replacement!
+            "uwu" => TokenKind::Uwu,
             "baka" => TokenKind::Baka, // Panic replacement!
             "wait" => TokenKind::Wait, // Coroutine sleep!
             "yield" => TokenKind::Yield,
@@ -510,5 +511,12 @@ mod tests {
 
         let (err, _) = Lexer::new("let x = @;").tokenize().unwrap_err();
         assert!(err.contains("B-baka!"));
+    }
+
+    #[test]
+    fn test_lexer_uwu_operator() {
+        let tokens = Lexer::new("a uwu b").tokenize().unwrap();
+        let kinds: Vec<_> = tokens.iter().map(|t| t.kind.clone()).collect();
+        assert!(kinds.contains(&TokenKind::Uwu));
     }
 }

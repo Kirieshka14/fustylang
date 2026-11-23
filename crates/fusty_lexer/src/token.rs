@@ -17,6 +17,7 @@ pub enum TokenKind {
     Break,
     Continue,
     Meow, // The iconic safety bypass: `meow { ... }` or `meow nya ...`
+    Uwu,  // Cuddle operator: `a uwu b` = midpoint of a and b
     Baka, // Tsundere panic replacement: `baka!("...")`
     Wait, // Game coroutine pause: `wait 0.2;`
     Yield,
