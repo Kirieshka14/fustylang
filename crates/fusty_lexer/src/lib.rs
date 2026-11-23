@@ -182,7 +182,11 @@ impl<'a> Lexer<'a> {
                         TokenKind::And
                     } else {
                         let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
-                        return Err(("Expected '&&', single '&' is not supported".into(), span));
+                        return Err((
+                            "B-baka! Did you mean '&&'? Single '&' isn't supported here... >///<"
+                                .into(),
+                            span,
+                        ));
                     }
                 }
 
@@ -192,7 +196,10 @@ impl<'a> Lexer<'a> {
                         TokenKind::Or
                     } else {
                         let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
-                        return Err(("Expected '||', single '|' is not supported".into(), span));
+                        return Err((
+                            "Hmph! Expected '||', single '|' isn't supported, dummy! >.<".into(),
+                            span,
+                        ));
                     }
                 }
 
@@ -204,7 +211,12 @@ impl<'a> Lexer<'a> {
 
                 other => {
                     let span = Span::new(start_pos, self.current_pos(), start_line, start_col);
-                    return Err((format!("Unexpected character: '{other}'"), span));
+                    return Err((
+                        format!(
+                            "B-baka! What is '{other}' doing in my code?! Not like I care or anything... >///<"
+                        ),
+                        span,
+                    ));
                 }
             };
 
@@ -259,7 +271,11 @@ impl<'a> Lexer<'a> {
                             None => {
                                 let span =
                                     Span::new(start_pos, self.current_pos(), start_line, start_col);
-                                return Err(("Unterminated multi-line comment".into(), span));
+                                return Err((
+                                    "Hmph! You forgot to close your multi-line comment '*/', b-baka! >.<"
+                                        .into(),
+                                    span,
+                                ));
                             }
                         }
                     }
@@ -289,13 +305,21 @@ impl<'a> Lexer<'a> {
                     Some(c) => s.push(c),
                     None => {
                         let span = Span::new(start_pos, self.current_pos(), line, col);
-                        return Err(("Unterminated escape in string literal".into(), span));
+                        return Err((
+                            "B-baka! Unterminated escape sequence in your string literal! >///<"
+                                .into(),
+                            span,
+                        ));
                     }
                 },
                 Some(c) => s.push(c),
                 None => {
                     let span = Span::new(start_pos, self.current_pos(), line, col);
-                    return Err(("Unterminated string literal".into(), span));
+                    return Err((
+                        "Hmph! Close your string literal with '\"', dummy! I'm not guessing where it ends! >.<"
+                            .into(),
+                        span,
+                    ));
                 }
             }
         }
@@ -339,7 +363,10 @@ impl<'a> Lexer<'a> {
                 Ok(val) => Ok(TokenKind::FloatLit(val)),
                 Err(e) => {
                     let span = Span::new(start_pos, self.current_pos(), line, col);
-                    Err((format!("Invalid float: {e}"), span))
+                    Err((
+                        format!("B-baka! That's not a valid float ({e})! Check your digits! >///<"),
+                        span,
+                    ))
                 }
             }
         } else {
@@ -347,7 +374,10 @@ impl<'a> Lexer<'a> {
                 Ok(val) => Ok(TokenKind::IntLit(val)),
                 Err(e) => {
                     let span = Span::new(start_pos, self.current_pos(), line, col);
-                    Err((format!("Invalid integer: {e}"), span))
+                    Err((
+                        format!("Hmph! That integer is way too weird ({e})! Fix it, b-baka! >.<"),
+                        span,
+                    ))
                 }
             }
         }
@@ -389,6 +419,7 @@ impl<'a> Lexer<'a> {
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
             "meow" => TokenKind::Meow, // Unsafe replacement!
+            "baka" => TokenKind::Baka, // Panic replacement!
             "wait" => TokenKind::Wait, // Coroutine sleep!
             "yield" => TokenKind::Yield,
             "spawn" => TokenKind::Spawn,
@@ -466,5 +497,18 @@ mod tests {
         assert!(kinds.contains(&TokenKind::Return));
         assert!(kinds.contains(&TokenKind::Vec3));
         assert!(kinds.contains(&TokenKind::Ident("player_hp".to_string())));
+    }
+
+    #[test]
+    fn test_lexer_baka_and_tsundere_errors() {
+        let mut lexer = Lexer::new(r#"nya oops() { baka!("stop it!"); }"#);
+        let tokens = lexer.tokenize().expect("Tokenization failed");
+        let kinds: Vec<_> = tokens.into_iter().map(|t| t.kind).collect();
+        assert!(kinds.contains(&TokenKind::Nya));
+        assert!(kinds.contains(&TokenKind::Baka));
+        assert!(kinds.contains(&TokenKind::Bang));
+
+        let (err, _) = Lexer::new("let x = @;").tokenize().unwrap_err();
+        assert!(err.contains("B-baka!"));
     }
 }
