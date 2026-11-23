@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 fusty_bytecode = { path = "../fusty_bytecode" }
+
+[dev-dependencies]
+fusty_lexer = { path = "../fusty_lexer" }
+fusty_parser = { path = "../fusty_parser" }

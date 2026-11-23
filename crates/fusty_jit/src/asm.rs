@@ -223,6 +223,16 @@ impl Assembler {
         self.emit_u8(imm);
     }
 
+    /// `cmp byte ptr [base], 0` (used for checking `out_err` after recursive calls)
+    pub fn cmp_byte_mr_zero(&mut self, base: Reg) {
+        if base.is_ext() {
+            self.emit_rex(false, false, false, true);
+        }
+        self.emit_u8(0x80);
+        self.emit_mem_disp32(7, base, 0);
+        self.emit_u8(0);
+    }
+
     /// `lea dst, [base + disp32]`
     pub fn lea_disp(&mut self, dst: Reg, base: Reg, disp: i32) {
         self.emit_rex(true, dst.is_ext(), false, base.is_ext());

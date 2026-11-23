@@ -25,6 +25,8 @@ name = "fusty_jit"
 version = "0.1.0"
 dependencies = [
  "fusty_bytecode",
+ "fusty_lexer",
+ "fusty_parser",
 ]
 
 [[package]]

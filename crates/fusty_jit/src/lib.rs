@@ -1,5 +1,6 @@
 pub mod analyze;
 pub mod asm;
+pub mod compiler;
 pub mod memory;
 
 use std::fmt;
