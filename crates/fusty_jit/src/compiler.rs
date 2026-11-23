@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use fusty_bytecode::chunk::Chunk;
 
 use crate::analyze::{analyze_function, AnalyzedFunction, DecodedOp};
-use crate::asm::{Assembler, Cond, Label, Reg};
+use crate::asm::{Assembler, Cond, Label, Reg, Xmm};
 use crate::memory::ExecutableBuffer;
 use crate::{JitError, JitRuntimeErr, JitValueKind};
 
@@ -82,11 +82,7 @@ pub fn compile_function(
     let analyzed = analyze_function(chunk, fn_idx, kind)?;
     let machine_code = match kind {
         JitValueKind::Int64 => emit_i64_function(&analyzed)?,
-        JitValueKind::Float64 => {
-            return Err(JitError::new(
-                "Float64 JIT path is not enabled yet (pending SSE2 compiler commit)",
-            ))
-        }
+        JitValueKind::Float64 => emit_f64_function(&analyzed)?,
     };
 
     let buffer = ExecutableBuffer::from_code(&machine_code)?;
@@ -325,6 +321,228 @@ fn emit_i64_cmp(asm: &mut Assembler, cond: Cond) {
     emit_push(asm, Reg::Rax);
 }
 
+fn emit_f64_cmp(asm: &mut Assembler, cond: Cond) {
+    emit_pop(asm, Reg::Rcx); // rhs bits
+    emit_pop(asm, Reg::Rax); // lhs bits
+    asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+    asm.movq_xmm_r(Xmm::Xmm1, Reg::Rcx);
+    asm.ucomisd(Xmm::Xmm0, Xmm::Xmm1);
+    asm.setcc_bool(cond, Reg::Rax);
+    asm.cvtsi2sd(Xmm::Xmm0, Reg::Rax);
+    asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+    emit_push(asm, Reg::Rax);
+}
+
+fn emit_f64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
+    let mut asm = Assembler::new();
+
+    let entry_label = asm.create_label();
+    let epilogue_label = asm.create_label();
+    let div_zero_label = asm.create_label();
+    let stack_overflow_label = asm.create_label();
+
+    let mut ip_labels: HashMap<usize, Label> = HashMap::new();
+    for &target_ip in &func.jump_targets {
+        ip_labels.insert(target_ip, asm.create_label());
+    }
+
+    // --- Prologue ---
+    asm.bind_label(entry_label);
+    asm.push_reg(Reg::Rbp);
+    asm.mov_rr(Reg::Rbp, Reg::Rsp);
+    asm.push_reg(Reg::R12);
+    asm.push_reg(Reg::R13);
+    asm.push_reg(Reg::R14);
+    asm.push_reg(Reg::R15);
+    asm.push_reg(Reg::Rbx);
+    asm.sub_rsp_i32(VSTACK_FRAME_BYTES);
+
+    asm.mov_rr(Reg::R12, Reg::Rsp);
+    asm.mov_rr(Reg::R13, Reg::Rsp);
+    asm.mov_rr(Reg::R14, Reg::Rsi);
+    asm.mov_rr(Reg::R15, Reg::Rdx);
+
+    asm.mov_ri64(Reg::Rax, MAX_JIT_RECURSION_DEPTH);
+    asm.cmp_rr(Reg::R15, Reg::Rax);
+    asm.jcc_label(Cond::Ge, stack_overflow_label);
+
+    for i in 0..func.arity as i32 {
+        asm.mov_rm_disp(Reg::Rax, Reg::Rdi, i * 8);
+        asm.mov_mr_disp(Reg::R12, i * 8, Reg::Rax);
+    }
+    if func.arity > 0 {
+        asm.lea_disp(Reg::R13, Reg::R12, (func.arity as i32) * 8);
+    }
+
+    // --- Body ---
+    for instr in &func.instrs {
+        if let Some(&lbl) = ip_labels.get(&instr.ip) {
+            asm.bind_label(lbl);
+        }
+
+        match instr.op {
+            DecodedOp::ConstFloat(v) => {
+                asm.mov_ri64(Reg::Rax, v.to_bits() as i64);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::ConstInt(v) => {
+                asm.mov_ri64(Reg::Rax, (v as f64).to_bits() as i64);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::ConstBool(b) => {
+                let bits = if b {
+                    1.0f64.to_bits()
+                } else {
+                    0.0f64.to_bits()
+                };
+                asm.mov_ri64(Reg::Rax, bits as i64);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Nil => {
+                asm.mov_ri64(Reg::Rax, 0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Pop => {
+                asm.lea_disp(Reg::R13, Reg::R13, -8);
+            }
+            DecodedOp::PopUnder(count) => {
+                emit_pop(&mut asm, Reg::Rax);
+                asm.lea_disp(Reg::R13, Reg::R13, -(count as i32) * 8);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::GetLocal(slot) => {
+                asm.mov_rm_disp(Reg::Rax, Reg::R12, (slot as i32) * 8);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::SetLocal(slot) => {
+                emit_peek(&mut asm, Reg::Rax);
+                asm.mov_mr_disp(Reg::R12, (slot as i32) * 8, Reg::Rax);
+            }
+            DecodedOp::Add => {
+                emit_pop(&mut asm, Reg::Rcx);
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm1, Reg::Rcx);
+                asm.addsd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Sub => {
+                emit_pop(&mut asm, Reg::Rcx);
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm1, Reg::Rcx);
+                asm.subsd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Mul => {
+                emit_pop(&mut asm, Reg::Rcx);
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm1, Reg::Rcx);
+                asm.mulsd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Div => {
+                emit_pop(&mut asm, Reg::Rcx);
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm1, Reg::Rcx);
+                asm.xorpd(Xmm::Xmm2, Xmm::Xmm2);
+                asm.ucomisd(Xmm::Xmm1, Xmm::Xmm2);
+                asm.jcc_label(Cond::E, div_zero_label);
+                asm.divsd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Mod => {
+                return Err(JitError::new("Float modulo is handled by VM fallback"));
+            }
+            DecodedOp::Neg => {
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.mov_ri64(Reg::Rcx, i64::MIN); // sign bit 0x8000_0000_0000_0000
+                asm.movq_xmm_r(Xmm::Xmm1, Reg::Rcx);
+                asm.xorpd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Not => {
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.xorpd(Xmm::Xmm1, Xmm::Xmm1);
+                asm.ucomisd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.setcc_bool(Cond::E, Reg::Rax);
+                asm.cvtsi2sd(Xmm::Xmm0, Reg::Rax);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Eq => emit_f64_cmp(&mut asm, Cond::E),
+            DecodedOp::NotEq => emit_f64_cmp(&mut asm, Cond::Ne),
+            DecodedOp::Lt => emit_f64_cmp(&mut asm, Cond::B),
+            DecodedOp::LtEq => emit_f64_cmp(&mut asm, Cond::Be),
+            DecodedOp::Gt => emit_f64_cmp(&mut asm, Cond::A),
+            DecodedOp::GtEq => emit_f64_cmp(&mut asm, Cond::Ae),
+            DecodedOp::Jump(target) | DecodedOp::Loop(target) => {
+                let lbl = ip_labels[&target];
+                asm.jmp_label(lbl);
+            }
+            DecodedOp::JumpIfFalse(target) => {
+                let lbl = ip_labels[&target];
+                emit_peek(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.xorpd(Xmm::Xmm1, Xmm::Xmm1);
+                asm.ucomisd(Xmm::Xmm0, Xmm::Xmm1);
+                asm.jcc_label(Cond::E, lbl);
+            }
+            DecodedOp::SelfCall { argc } => {
+                let bytes = (argc as i32) * 8;
+                asm.lea_disp(Reg::R13, Reg::R13, -bytes);
+                asm.mov_rr(Reg::Rdi, Reg::R13);
+                asm.mov_rr(Reg::Rsi, Reg::R14);
+                asm.lea_disp(Reg::Rdx, Reg::R15, 1);
+                asm.call_label(entry_label);
+                asm.cmp_byte_mr_zero(Reg::R14);
+                asm.jcc_label(Cond::Ne, epilogue_label);
+                asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
+                emit_push(&mut asm, Reg::Rax);
+            }
+            DecodedOp::Return => {
+                emit_pop(&mut asm, Reg::Rax);
+                asm.movq_xmm_r(Xmm::Xmm0, Reg::Rax);
+                asm.jmp_label(epilogue_label);
+            }
+        }
+    }
+
+    asm.xorpd(Xmm::Xmm0, Xmm::Xmm0);
+    asm.jmp_label(epilogue_label);
+
+    asm.bind_label(div_zero_label);
+    asm.mov_byte_mr(Reg::R14, JitRuntimeErr::DivisionByZero as u8);
+    asm.xorpd(Xmm::Xmm0, Xmm::Xmm0);
+    asm.jmp_label(epilogue_label);
+
+    asm.bind_label(stack_overflow_label);
+    asm.mov_byte_mr(Reg::R14, JitRuntimeErr::StackOverflow as u8);
+    asm.xorpd(Xmm::Xmm0, Xmm::Xmm0);
+
+    // --- Epilogue ---
+    asm.bind_label(epilogue_label);
+    asm.add_rsp_i32(VSTACK_FRAME_BYTES);
+    asm.pop_reg(Reg::Rbx);
+    asm.pop_reg(Reg::R15);
+    asm.pop_reg(Reg::R14);
+    asm.pop_reg(Reg::R13);
+    asm.pop_reg(Reg::R12);
+    asm.pop_reg(Reg::Rbp);
+    asm.ret();
+
+    asm.finalize()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +614,38 @@ mod tests {
         assert_eq!(
             boom_fn.call_i64(&[0]).unwrap_err(),
             JitRuntimeErr::StackOverflow
+        );
+    }
+
+    #[test]
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    fn test_jit_compile_f64_sse2_physics_and_div_zero() {
+        let src = r#"
+            nya integrate(v0: f64, acc: f64, steps: f64) -> f64 {
+                let mut v = v0;
+                let mut i = 0.0;
+                while i < steps {
+                    v = v + acc * 0.5;
+                    i = i + 1.0;
+                }
+                return -(-v);
+            }
+
+            nya ratio(a: f64, b: f64) -> f64 {
+                return a / b;
+            }
+        "#;
+        let chunk = compile_chunk(src);
+
+        let f = compile_function(&chunk, 0, JitValueKind::Float64).expect("jit integrate");
+        let out = f.call_f64(&[10.0, 4.0, 5.0]).unwrap();
+        assert!((out - 20.0).abs() < 1e-12);
+
+        let r = compile_function(&chunk, 1, JitValueKind::Float64).expect("jit ratio");
+        assert!((r.call_f64(&[9.0, 2.0]).unwrap() - 4.5).abs() < 1e-12);
+        assert_eq!(
+            r.call_f64(&[9.0, 0.0]).unwrap_err(),
+            JitRuntimeErr::DivisionByZero
         );
     }
 }
