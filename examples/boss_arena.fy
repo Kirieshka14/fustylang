@@ -3,7 +3,7 @@
 // Edit & save this file while `ferrium_engine` is running to hot-reload live!
 // ============================================================================
 
-fn dash_strike(dir: vec2, speed: f64) {
+nya dash_strike(dir: vec2, speed: f64) {
     set_boss_state("windup");
     set_self_vel(vec2(0.0, 0.0));
     spawn_particles(get_self_pos(), 8, 252, 186, 48);

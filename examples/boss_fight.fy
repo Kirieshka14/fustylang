@@ -11,7 +11,7 @@ struct Boss {
     vel: vec2,
 }
 
-fn attack_sequence() {
+nya attack_sequence() {
     let mut boss_pos = vec2(500.0, 300.0);
     let player_pos = vec2(150.0, 100.0);
 

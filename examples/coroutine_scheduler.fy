@@ -1,6 +1,6 @@
 // Multi-step coroutine scheduler demo using wait and yield
 
-fn patrol_step(id: i64) {
+nya patrol_step(id: i64) {
     log("agent", id, "starting patrol");
     wait 0.05;
     log("agent", id, "checkpoint A reached");

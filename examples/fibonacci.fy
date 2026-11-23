@@ -1,13 +1,13 @@
 // Fibonacci sequence in FustyLang (recursive & iterative)
 
-fn fib_rec(n: i64) -> i64 {
+nya fib_rec(n: i64) -> i64 {
     if n <= 1 {
         return n;
     }
     return fib_rec(n - 1) + fib_rec(n - 2);
 }
 
-fn fib_iter(n: i64) -> i64 {
+nya fib_iter(n: i64) -> i64 {
     if n <= 1 {
         return n;
     }
