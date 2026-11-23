@@ -45,6 +45,7 @@ name = "fusty_vm"
 version = "0.1.0"
 dependencies = [
  "fusty_bytecode",
+ "fusty_jit",
  "fusty_lexer",
  "fusty_parser",
 ]

@@ -4,6 +4,8 @@ use crate::arena::FrameArena;
 use crate::value::{Value, Vec2, Vec3};
 use fusty_bytecode::chunk::{Chunk, Constant};
 use fusty_bytecode::opcode::Opcode;
+use fusty_jit::engine::JitEngine;
+use fusty_jit::{JitMode, JitStats, JitValueKind};
 
 pub trait Host {
     fn call_native(&mut self, name: &str, args: &[Value], meow_mode: bool)
@@ -50,6 +52,7 @@ pub struct Vm {
     pub frames: Vec<CallFrame>,
     pub ip: usize,
     pub meow_mode: bool, // Safety disabled when inside one or more `meow` scopes
+    pub jit: JitEngine,
     meow_depth: usize,
 }
 
@@ -64,11 +67,29 @@ fn line_at(chunk: &Chunk, ip: usize) -> usize {
     chunk.lines.get(ip).copied().unwrap_or(0)
 }
 
+#[inline]
+fn infer_jit_arg_kind(args: &[Value]) -> Option<JitValueKind> {
+    if args.is_empty() {
+        return Some(JitValueKind::Int64);
+    }
+    if args.iter().all(|v| matches!(v, Value::Int(_))) {
+        Some(JitValueKind::Int64)
+    } else if args.iter().all(|v| matches!(v, Value::Float(_))) {
+        Some(JitValueKind::Float64)
+    } else {
+        None
+    }
+}
+
 impl Vm {
     pub const DEFAULT_STEP_BUDGET: usize = 200_000;
     pub const MAX_CALL_DEPTH: usize = 256;
 
     pub fn new() -> Self {
+        Self::with_jit_mode(JitMode::default())
+    }
+
+    pub fn with_jit_mode(mode: JitMode) -> Self {
         Self {
             frame_arena: FrameArena::new(1024 * 1024), // 1MB frame arena
             stack: Vec::with_capacity(512),
@@ -76,8 +97,17 @@ impl Vm {
             frames: Vec::with_capacity(32),
             ip: 0,
             meow_mode: false,
+            jit: JitEngine::new(mode),
             meow_depth: 0,
         }
+    }
+
+    pub fn jit_stats(&self) -> &JitStats {
+        self.jit.stats()
+    }
+
+    pub fn set_jit_mode(&mut self, mode: JitMode) {
+        self.jit.set_mode(mode);
     }
 
     pub fn reset_frame(&mut self) {
@@ -91,6 +121,7 @@ impl Vm {
         self.ip = 0;
         self.meow_depth = 0;
         self.meow_mode = false;
+        self.jit.clear();
         self.frame_arena.reset();
     }
 
@@ -643,6 +674,57 @@ impl Vm {
                         });
                     }
                     let frame_base = self.stack.len() - argc_usize;
+
+                    // Tiered JIT fast-path: profile & execute natively when hot and type-specialized
+                    if argc_usize <= 16 {
+                        if let Some(kind) = infer_jit_arg_kind(&self.stack[frame_base..]) {
+                            let jit_outcome = match self.jit.get_or_compile(chunk, fn_idx, kind) {
+                                Some(compiled) => Some(match kind {
+                                    JitValueKind::Int64 => {
+                                        let mut raw = [0i64; 16];
+                                        for (i, v) in self.stack[frame_base..].iter().enumerate() {
+                                            if let Value::Int(n) = v {
+                                                raw[i] = *n;
+                                            }
+                                        }
+                                        compiled.call_i64(&raw[..argc_usize]).map(Value::Int)
+                                    }
+                                    JitValueKind::Float64 => {
+                                        let mut raw = [0.0f64; 16];
+                                        for (i, v) in self.stack[frame_base..].iter().enumerate() {
+                                            if let Value::Float(f) = v {
+                                                raw[i] = *f;
+                                            }
+                                        }
+                                        compiled.call_f64(&raw[..argc_usize]).map(Value::Float)
+                                    }
+                                }),
+                                None => None,
+                            };
+
+                            if let Some(outcome) = jit_outcome {
+                                self.jit.record_native_call();
+                                match outcome {
+                                    Ok(val) => {
+                                        self.stack.truncate(frame_base);
+                                        self.stack.push(val);
+                                        continue;
+                                    }
+                                    Err(jit_err) => {
+                                        return Err(VmError {
+                                            message: jit_err.to_tsundere_message().to_string(),
+                                            line: line_at(chunk, op_ip),
+                                        });
+                                    }
+                                }
+                            } else {
+                                self.jit.record_fallback();
+                            }
+                        } else {
+                            self.jit.record_fallback();
+                        }
+                    }
+
                     self.frames.push(CallFrame {
                         return_ip: self.ip,
                         base_slot: frame_base,

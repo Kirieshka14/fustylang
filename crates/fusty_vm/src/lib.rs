@@ -332,4 +332,46 @@ mod tests {
         assert!(err2.message.contains("[BAKA! >///<]"));
         assert!(err2.message.contains("explicit baka! panic"));
     }
+
+    #[test]
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    fn test_vm_tiered_jit_auto_and_eager_execution() {
+        let src = r#"
+            nya fib(n: i64) -> i64 {
+                if n <= 1 {
+                    return n;
+                }
+                return fib(n - 1) + fib(n - 2);
+            }
+
+            let mut total = 0;
+            let mut i = 0;
+            while i < 5 {
+                total += fib(12);
+                i += 1;
+            }
+            return total;
+        "#;
+        let chunk = compile_src(src);
+
+        // VM-only baseline
+        let mut vm_interp = Vm::with_jit_mode(fusty_jit::JitMode::Disabled);
+        let interp_res = vm_interp.run(&chunk).unwrap();
+        assert_eq!(interp_res, VmResult::Done(Value::Int(144 * 5)));
+        assert_eq!(vm_interp.jit_stats().native_calls, 0);
+
+        // Auto-JIT (inner recursive calls hit hot_threshold immediately and tier up to native!)
+        let mut vm_auto = Vm::with_jit_mode(fusty_jit::JitMode::Auto { hot_threshold: 3 });
+        let auto_res = vm_auto.run(&chunk).unwrap();
+        assert_eq!(auto_res, interp_res);
+        assert_eq!(vm_auto.jit_stats().compiled_functions, 1);
+        assert!(vm_auto.jit_stats().native_calls >= 3);
+
+        // Eager JIT (compiles on 1st call, all 5 calls native)
+        let mut vm_eager = Vm::with_jit_mode(fusty_jit::JitMode::Eager);
+        let eager_res = vm_eager.run(&chunk).unwrap();
+        assert_eq!(eager_res, interp_res);
+        assert_eq!(vm_eager.jit_stats().compiled_functions, 1);
+        assert_eq!(vm_eager.jit_stats().native_calls, 5);
+    }
 }
