@@ -9,6 +9,7 @@
 - **Pure-Rust Native x86-64 Tiered JIT (`crates/fusty_jit`):** Zero-dependency machine-code assembler + W^X `mmap`/`mprotect` allocator + hot-call profiler. Automatically compiles hot `nya` functions (`i64` integer + `f64` SSE2 floating-point, loops, branches, and self-recursion) into native x86-64 machine code with seamless VM fallback for coroutines, vectors, and `baka!`.
 - **Femboy / Kawaii Rust-Inspired Syntax:**
   - `nya` replaces `fn` for function declarations (`nya fib(n: i64) -> i64 { ... }`).
+  - `a uwu b` is the **cuddle operator**: the midpoint of two numbers, `vec2`s or `vec3`s (`vec2(0.0, 0.0) uwu vec2(10.0, 20.0)` = `vec2(5, 10)`).
   - `baka!(...)` replaces `panic!(...)` for explicit runtime panics (`[BAKA! >///<]`).
   - `meow { ... }` / `meow nya ...` replaces `unsafe` with runtime `meow_depth` tracking.
   - `purr(...)` built-in cute logger alongside `log(...)`.
