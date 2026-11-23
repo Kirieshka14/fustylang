@@ -310,6 +310,16 @@ impl Vm {
                     self.stack.push(res);
                 }
 
+                Opcode::Uwu => {
+                    let b = self.pop(chunk, op_ip)?;
+                    let a = self.pop(chunk, op_ip)?;
+                    let res = a.cuddle(&b).map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
+                    self.stack.push(res);
+                }
+
                 Opcode::Neg => {
                     let a = self.pop(chunk, op_ip)?;
                     let res = a.neg().map_err(|message| VmError {

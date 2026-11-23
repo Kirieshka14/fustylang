@@ -68,6 +68,7 @@ pub enum Opcode {
     Return,
     Halt,
     Baka, // Tsundere runtime panic (`baka!(msg)`)
+    Uwu,  // Cuddle: pops b, a; pushes midpoint of a and b
 }
 
 impl Opcode {
@@ -123,6 +124,7 @@ impl Opcode {
             47 => Some(Self::Return),
             48 => Some(Self::Halt),
             49 => Some(Self::Baka),
+            50 => Some(Self::Uwu),
             _ => None,
         }
     }

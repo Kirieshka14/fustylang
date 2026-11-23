@@ -625,7 +625,7 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
-        let mut left = self.parse_term()?;
+        let mut left = self.parse_uwu()?;
         loop {
             let op = if self.match_token(&TokenKind::Lt) {
                 BinOp::Lt
@@ -638,7 +638,7 @@ impl Parser {
             } else {
                 break;
             };
-            let right = self.parse_term()?;
+            let right = self.parse_uwu()?;
             let span = Span::new(
                 left.span().start,
                 right.span().end,
@@ -648,6 +648,28 @@ impl Parser {
             left = Expr::Binary {
                 left: Box::new(left),
                 op,
+                right: Box::new(right),
+                span,
+            };
+        }
+        Ok(left)
+    }
+
+    /// `a uwu b` — the cuddle operator. Binds tighter than comparisons,
+    /// looser than `+`/`-`, so `a + b uwu c + d` = `(a + b) uwu (c + d)`.
+    fn parse_uwu(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_term()?;
+        while self.match_token(&TokenKind::Uwu) {
+            let right = self.parse_term()?;
+            let span = Span::new(
+                left.span().start,
+                right.span().end,
+                left.span().line,
+                left.span().col,
+            );
+            left = Expr::Binary {
+                left: Box::new(left),
+                op: BinOp::Uwu,
                 right: Box::new(right),
                 span,
             };

@@ -682,6 +682,7 @@ impl Compiler {
                         BinOp::LtEq => self.chunk.write_op(Opcode::LtEq, line),
                         BinOp::Gt => self.chunk.write_op(Opcode::Gt, line),
                         BinOp::GtEq => self.chunk.write_op(Opcode::GtEq, line),
+                        BinOp::Uwu => self.chunk.write_op(Opcode::Uwu, line),
                         BinOp::And | BinOp::Or => unreachable!(),
                     }
                 }

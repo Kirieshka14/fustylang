@@ -23,6 +23,7 @@ pub enum BinOp {
     GtEq,
     And,
     Or,
+    Uwu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -326,6 +326,41 @@ impl Value {
         }
     }
 
+    fn type_name(&self) -> &'static str {
+        match self {
+            Value::Nil => "nil",
+            Value::Bool(_) => "a bool",
+            Value::Int(_) => "an int",
+            Value::Float(_) => "a float",
+            Value::V2(_) => "a vec2",
+            Value::V3(_) => "a vec3",
+            Value::String(_) => "a string",
+        }
+    }
+
+    /// The `uwu` operator: the midpoint between two values.
+    /// Numbers always cuddle into a Float (so `1 uwu 2` = `1.5`);
+    /// vec2/vec3 cuddle component-wise with their own kind.
+    pub fn cuddle(&self, rhs: &Value) -> Result<Value, String> {
+        let num = |v: &Value| match v {
+            Value::Int(i) => Some(*i as f64),
+            Value::Float(f) => Some(*f),
+            _ => None,
+        };
+        match (self, rhs) {
+            (Value::V2(a), Value::V2(b)) => Ok(Value::V2((*a + *b) * 0.5)),
+            (Value::V3(a), Value::V3(b)) => Ok(Value::V3((*a + *b) * 0.5)),
+            _ => match (num(self), num(rhs)) {
+                (Some(a), Some(b)) => Ok(Value::Float(a / 2.0 + b / 2.0)),
+                _ => Err(format!(
+                    "B-baka! You can't uwu {} with {}... they need to be the same kind of cuddly (numbers, vec2 or vec3)! >///<",
+                    self.type_name(),
+                    rhs.type_name()
+                )),
+            },
+        }
+    }
+
     pub fn rem(&self, rhs: &Value) -> Result<Value, String> {
         match (self, rhs) {
             (Value::Int(a), Value::Int(b)) => {

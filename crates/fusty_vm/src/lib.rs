@@ -21,6 +21,34 @@ mod tests {
     }
 
     #[test]
+    fn test_uwu_cuddles_numbers_and_vectors() {
+        let run = |src: &str| {
+            let chunk = compile_src(src);
+            Vm::new().run(&chunk).expect("VM run failed")
+        };
+        assert_eq!(run("return 1 uwu 2;"), VmResult::Done(Value::Float(1.5)));
+        assert_eq!(
+            run("return 1 + 1 uwu 4 + 4;"),
+            VmResult::Done(Value::Float(5.0))
+        );
+        assert_eq!(
+            run("return vec2(0.0, 0.0) uwu vec2(2.0, 4.0);"),
+            VmResult::Done(Value::V2(Vec2::new(1.0, 2.0)))
+        );
+        assert_eq!(
+            run("return vec3(0.0, 0.0, 0.0) uwu vec3(2.0, 4.0, 6.0);"),
+            VmResult::Done(Value::V3(Vec3::new(1.0, 2.0, 3.0)))
+        );
+    }
+
+    #[test]
+    fn test_uwu_rejects_mismatched_types() {
+        let chunk = compile_src("return 1 uwu vec2(1.0, 1.0);");
+        let err = Vm::new().run(&chunk).unwrap_err();
+        assert!(err.message.contains("B-baka!"));
+    }
+
+    #[test]
     fn test_vm_vector_math() {
         let mut chunk = Chunk::new();
         chunk.write_const(Constant::Float(10.0), 1);
