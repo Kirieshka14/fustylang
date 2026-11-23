@@ -2,6 +2,23 @@
 
 All notable changes to FustyLang will be documented in this file.
 
+## [0.2.0] - 2026-11-23
+
+### Added
+- **Pure-Rust Native x86-64 Tiered JIT (`fusty_jit`)** with zero external dependencies:
+  - W^X executable memory allocator via Linux `mmap`/`mprotect`/`munmap`.
+  - Custom x86-64 machine code assembler for GPR integer ops, SSE2 `f64` math, labels, branches, loops, and self-recursion.
+  - Bytecode eligibility analyzer, type specialization (`i64` / `f64`), and hot-call `JitEngine` with automatic VM fallback.
+- **`baka!(...)` panic expression & `Opcode::Baka`** replacing `panic!` with tsundere runtime diagnostics (`[BAKA! >///<]`).
+- **Tsundere compiler personality** across lexer, parser, bytecode compiler, JIT runtime, VM, and CLI.
+- **`purr(...)` built-in logger** alongside `log(...)` in `fusty_cli`.
+- **CLI JIT controls & benchmarker:** `--jit`, `--no-jit`, `--jit-stats`, and `fusty bench <file.fy>`.
+- New examples (`examples/jit_benchmark.fy`, `examples/tsundere_baka.fy`) and comprehensive JIT-vs-VM parity tests.
+
+### Changed
+- **Breaking:** Replaced `fn` keyword with `nya` across lexer, parser, tests, examples, and documentation (`meow fn` is now `meow nya`).
+- Extended `FunctionMeta` with `end_ip` bytecode bounds for exact JIT compilation ranges.
+
 ## [0.1.0] - 2026-11-21
 
 ### Added

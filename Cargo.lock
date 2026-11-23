@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "fusty_bytecode"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fusty_lexer",
  "fusty_parser",
@@ -12,7 +12,7 @@ dependencies = [
 
 [[package]]
 name = "fusty_cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fusty_bytecode",
  "fusty_jit",
@@ -23,7 +23,7 @@ dependencies = [
 
 [[package]]
 name = "fusty_jit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fusty_bytecode",
  "fusty_lexer",
@@ -32,18 +32,18 @@ dependencies = [
 
 [[package]]
 name = "fusty_lexer"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "fusty_parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fusty_lexer",
 ]
 
 [[package]]
 name = "fusty_vm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fusty_bytecode",
  "fusty_jit",
