@@ -266,16 +266,16 @@ impl Value {
         match (self, rhs) {
             (Value::Int(a), Value::Int(b)) => {
                 if *b == 0 {
-                    Err("Division by zero".into())
+                    Err("B-baka! Division by zero?! Are you trying to break me?! >///<".into())
                 } else {
                     a.checked_div(*b)
                         .map(Value::Int)
-                        .ok_or_else(|| "Integer overflow in division".to_string())
+                        .ok_or_else(|| "Hmph! Integer overflow in division, dummy! >.<".to_string())
                 }
             }
             (Value::Float(a), Value::Float(b)) => {
                 if *b == 0.0 {
-                    Err("Division by zero".into())
+                    Err("B-baka! Division by zero?! Are you trying to break me?! >///<".into())
                 } else {
                     Ok(Value::Float(a / b))
                 }

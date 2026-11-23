@@ -128,7 +128,7 @@ impl Vm {
             if steps > max_steps {
                 return Err(VmError {
                     message: format!(
-                        "Execution budget exceeded ({} steps without wait/yield)",
+                        "Hmph! Execution budget exceeded ({} steps without wait/yield) — stop writing infinite loops, b-baka! >.<",
                         max_steps
                     ),
                     line: line_at(chunk, self.ip),
@@ -610,7 +610,7 @@ impl Vm {
                     if self.frames.len() >= Self::MAX_CALL_DEPTH {
                         return Err(VmError {
                             message: format!(
-                                "Call stack overflow (max depth {})",
+                                "B-baka! Call stack overflow (max depth {})! Stop recursing forever! >///<",
                                 Self::MAX_CALL_DEPTH
                             ),
                             line: line_at(chunk, op_ip),
@@ -623,7 +623,7 @@ impl Vm {
                     if meta.arity != argc {
                         return Err(VmError {
                             message: format!(
-                                "Function '{}' expected {} arguments, got {}",
+                                "Hmph! nya '{}' expected {} arguments, not {}, b-baka! >.<",
                                 meta.name, meta.arity, argc
                             ),
                             line: line_at(chunk, op_ip),

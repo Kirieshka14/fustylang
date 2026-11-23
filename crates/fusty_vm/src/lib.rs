@@ -308,4 +308,28 @@ mod tests {
         let ptr = arena.alloc_bytes(16, 8).unwrap();
         assert_eq!(ptr as usize % 8, 0);
     }
+
+    #[test]
+    fn test_vm_baka_panic_with_and_without_message() {
+        let src = r#"
+            nya guard(hp: i64) -> i64 {
+                if hp <= 0 {
+                    baka!("out of headpats");
+                }
+                return hp;
+            }
+            return guard(0);
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        let err = vm.run(&chunk).unwrap_err();
+        assert!(err.message.contains("[BAKA! >///<]"));
+        assert!(err.message.contains("out of headpats"));
+
+        let empty_baka = compile_src("baka!();");
+        let mut vm2 = Vm::new();
+        let err2 = vm2.run(&empty_baka).unwrap_err();
+        assert!(err2.message.contains("[BAKA! >///<]"));
+        assert!(err2.message.contains("explicit baka! panic"));
+    }
 }
