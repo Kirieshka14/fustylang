@@ -67,6 +67,7 @@ pub enum Opcode {
     CallNative,
     Return,
     Halt,
+    Baka, // Tsundere runtime panic (`baka!(msg)`)
 }
 
 impl Opcode {
@@ -121,6 +122,7 @@ impl Opcode {
             46 => Some(Self::CallNative),
             47 => Some(Self::Return),
             48 => Some(Self::Halt),
+            49 => Some(Self::Baka),
             _ => None,
         }
     }

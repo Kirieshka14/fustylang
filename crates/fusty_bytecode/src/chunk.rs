@@ -34,6 +34,7 @@ impl Constant {
 pub struct FunctionMeta {
     pub name: String,
     pub entry_ip: usize,
+    pub end_ip: usize,
     pub arity: u8,
     pub is_meow: bool,
 }

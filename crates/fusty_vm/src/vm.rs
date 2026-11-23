@@ -707,6 +707,16 @@ impl Vm {
                     let res = self.stack.pop().unwrap_or(Value::Nil);
                     return Ok(VmResult::Done(res));
                 }
+
+                Opcode::Baka => {
+                    let msg = self.stack.pop().unwrap_or(Value::Nil);
+                    self.meow_depth = 0;
+                    self.meow_mode = false;
+                    return Err(VmError {
+                        message: format!("[BAKA! >///<] {}", msg),
+                        line: line_at(chunk, op_ip),
+                    });
+                }
             }
         }
 

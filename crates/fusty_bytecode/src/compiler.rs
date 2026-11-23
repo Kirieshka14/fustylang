@@ -72,19 +72,22 @@ impl Compiler {
             if let Item::Fn(fn_decl) = item {
                 if self.fn_indices.contains_key(&fn_decl.name) {
                     return Err(CompileError {
-                        message: format!("Duplicate function definition '{}'", fn_decl.name),
+                        message: format!(
+                            "B-baka! You already defined nya '{}'! Pick another name, dummy! >///<",
+                            fn_decl.name
+                        ),
                     });
                 }
                 let idx = self.chunk.functions.len();
                 if idx > u16::MAX as usize {
                     return Err(CompileError {
-                        message: "Too many functions in chunk".into(),
+                        message: "Hmph! Too many functions in one chunk, b-baka! >.<".into(),
                     });
                 }
                 if fn_decl.params.len() > u8::MAX as usize {
                     return Err(CompileError {
                         message: format!(
-                            "Function '{}' has too many parameters (max 255)",
+                            "B-baka! Function '{}' has way too many parameters (max 255)! >///<",
                             fn_decl.name
                         ),
                     });
@@ -95,6 +98,7 @@ impl Compiler {
                 self.chunk.functions.push(FunctionMeta {
                     name: fn_decl.name.clone(),
                     entry_ip: 0,
+                    end_ip: 0,
                     arity,
                     is_meow: fn_decl.is_meow,
                 });
@@ -115,6 +119,7 @@ impl Compiler {
         for (idx, fn_decl) in fn_decls.iter().enumerate() {
             self.chunk.functions[idx].entry_ip = self.chunk.code.len();
             self.compile_fn(fn_decl)?;
+            self.chunk.functions[idx].end_ip = self.chunk.code.len();
         }
 
         self.chunk.global_count = self.globals.len() as u16;
@@ -306,14 +311,17 @@ impl Compiler {
                 match target {
                     Expr::Ident(name, _) => {
                         let binding = self.resolve_var(name).ok_or_else(|| CompileError {
-                            message: format!("Undefined variable '{}' in assignment", name),
+                            message: format!(
+                                "B-baka! Undefined variable '{}' in assignment! Did you even declare it?! >///<",
+                                name
+                            ),
                         })?;
                         match binding {
                             VarBinding::Local { slot, is_mut } => {
                                 if !is_mut {
                                     return Err(CompileError {
                                         message: format!(
-                                            "Cannot assign twice to immutable variable '{}' (use `let mut`)",
+                                            "B-baka! You can't touch immutable variable '{}'! Add `let mut` if you really want to change it... >///<",
                                             name
                                         ),
                                     });
@@ -327,7 +335,7 @@ impl Compiler {
                                 if !is_mut {
                                     return Err(CompileError {
                                         message: format!(
-                                            "Cannot assign twice to immutable variable '{}' (use `let mut`)",
+                                            "B-baka! You can't touch immutable variable '{}'! Add `let mut` if you really want to change it... >///<",
                                             name
                                         ),
                                     });
@@ -943,10 +951,16 @@ impl Compiler {
                 }
                 self.end_scope_keeping_top(span.line)?;
             }
-            Expr::Baka { .. } => {
-                return Err(CompileError {
-                    message: "B-baka! Bytecode lowering for baka! isn't wired up yet! >.<".into(),
-                });
+            Expr::Baka { message, span } => {
+                if let Some(msg_expr) = message {
+                    self.compile_expr(msg_expr)?;
+                } else {
+                    self.emit_const(
+                        Constant::String("explicit baka! panic".to_string()),
+                        span.line,
+                    )?;
+                }
+                self.chunk.write_op(Opcode::Baka, span.line);
             }
         }
         Ok(())
