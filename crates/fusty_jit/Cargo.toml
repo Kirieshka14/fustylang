@@ -1,0 +1,7 @@
+[package]
+name = "fusty_jit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fusty_bytecode = { path = "../fusty_bytecode" }

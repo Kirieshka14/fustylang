@@ -3,6 +3,7 @@ members = [
     "crates/fusty_lexer",
     "crates/fusty_parser",
     "crates/fusty_bytecode",
+    "crates/fusty_jit",
     "crates/fusty_vm",
     "crates/fusty_cli",
 ]

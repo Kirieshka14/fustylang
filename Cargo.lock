@@ -21,6 +21,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fusty_jit"
+version = "0.1.0"
+dependencies = [
+ "fusty_bytecode",
+]
+
+[[package]]
 name = "fusty_lexer"
 version = "0.1.0"
 
