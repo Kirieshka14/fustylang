@@ -27,56 +27,85 @@ impl Host for CliHost {
                 println!("  [LOG] {}", text);
                 Ok(Value::Nil)
             }
+            "purr" => {
+                let text = args
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                println!("  [PURR ~nya] {}", text);
+                Ok(Value::Nil)
+            }
             "sin" => args
                 .first()
                 .and_then(|v| v.as_f64())
                 .map(|x| Value::Float(x.sin()))
-                .ok_or_else(|| "'sin' expects 1 number".into()),
+                .ok_or_else(|| "B-baka! 'sin' expects 1 number! >.<".into()),
             "cos" => args
                 .first()
                 .and_then(|v| v.as_f64())
                 .map(|x| Value::Float(x.cos()))
-                .ok_or_else(|| "'cos' expects 1 number".into()),
+                .ok_or_else(|| "B-baka! 'cos' expects 1 number! >.<".into()),
             "sqrt" => args
                 .first()
                 .and_then(|v| v.as_f64())
                 .map(|x| Value::Float(x.sqrt()))
-                .ok_or_else(|| "'sqrt' expects 1 number".into()),
+                .ok_or_else(|| "B-baka! 'sqrt' expects 1 number! >.<".into()),
             "abs" => args
                 .first()
                 .and_then(|v| v.as_f64())
                 .map(|x| Value::Float(x.abs()))
-                .ok_or_else(|| "'abs' expects 1 number".into()),
+                .ok_or_else(|| "B-baka! 'abs' expects 1 number! >.<".into()),
             "min" if args.len() == 2 => {
-                let a = args[0].as_f64().ok_or("'min' expects numbers")?;
-                let b = args[1].as_f64().ok_or("'min' expects numbers")?;
+                let a = args[0]
+                    .as_f64()
+                    .ok_or("B-baka! 'min' expects numbers! >.<")?;
+                let b = args[1]
+                    .as_f64()
+                    .ok_or("B-baka! 'min' expects numbers! >.<")?;
                 Ok(Value::Float(a.min(b)))
             }
             "max" if args.len() == 2 => {
-                let a = args[0].as_f64().ok_or("'max' expects numbers")?;
-                let b = args[1].as_f64().ok_or("'max' expects numbers")?;
+                let a = args[0]
+                    .as_f64()
+                    .ok_or("B-baka! 'max' expects numbers! >.<")?;
+                let b = args[1]
+                    .as_f64()
+                    .ok_or("B-baka! 'max' expects numbers! >.<")?;
                 Ok(Value::Float(a.max(b)))
             }
             "clamp" if args.len() == 3 => {
-                let x = args[0].as_f64().ok_or("'clamp' expects numbers")?;
-                let lo = args[1].as_f64().ok_or("'clamp' expects numbers")?;
-                let hi = args[2].as_f64().ok_or("'clamp' expects numbers")?;
+                let x = args[0]
+                    .as_f64()
+                    .ok_or("B-baka! 'clamp' expects numbers! >.<")?;
+                let lo = args[1]
+                    .as_f64()
+                    .ok_or("B-baka! 'clamp' expects numbers! >.<")?;
+                let hi = args[2]
+                    .as_f64()
+                    .ok_or("B-baka! 'clamp' expects numbers! >.<")?;
                 Ok(Value::Float(x.clamp(lo, hi)))
             }
             "is_meow" => Ok(Value::Bool(meow_mode)),
-            other => Err(format!("Unknown native function '{}'", other)),
+            other => Err(format!(
+                "B-baka! I don't know any native function called '{}'! >///<",
+                other
+            )),
         }
     }
 }
 
 fn run_source(source: &str, file_name: &str) -> bool {
-    println!("=== [FustyLang] Compiling '{}' ===", file_name);
+    println!(
+        "=== [FustyLang ~nya] Compiling '{}' (it's not like I wanted to or anything!) ===",
+        file_name
+    );
 
     let mut lexer = Lexer::new(source);
     let tokens = match lexer.tokenize() {
         Ok(t) => t,
         Err((err, span)) => {
-            eprintln!("Lexer error at {}:{}: {}", span.line, span.col, err);
+            eprintln!("  [LEXER BAKA! >///<] {}:{}: {}", span.line, span.col, err);
             return false;
         }
     };
@@ -87,7 +116,7 @@ fn run_source(source: &str, file_name: &str) -> bool {
         Ok(p) => p,
         Err(e) => {
             eprintln!(
-                "Parser error at {}:{}: {}",
+                "  [PARSER BAKA! >///<] {}:{}: {}",
                 e.span.line, e.span.col, e.message
             );
             return false;
@@ -102,7 +131,7 @@ fn run_source(source: &str, file_name: &str) -> bool {
     let chunk = match compiler.compile_program(&program) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Compile error: {}", e.message);
+            eprintln!("  [COMPILER BAKA! >.<] {}", e.message);
             return false;
         }
     };
@@ -112,7 +141,7 @@ fn run_source(source: &str, file_name: &str) -> bool {
         chunk.constants.len()
     );
 
-    println!("\n=== [FustyLang] Running in Ferrium VM (Frame Arena + Dynamic Ticks) ===");
+    println!("\n=== [FustyLang ~nya] Running in Ferrium VM ===");
     let mut vm = Vm::new();
     let mut host = CliHost;
 
@@ -131,7 +160,7 @@ fn run_source(source: &str, file_name: &str) -> bool {
             }
             Ok(VmResult::Done(val)) => {
                 println!(
-                    "  [DONE] Script completed successfully with result: {}",
+                    "  [DONE ~nya] Hmph... fine, your script finished with result: {}",
                     val
                 );
                 return true;
@@ -149,7 +178,7 @@ fn main() -> ExitCode {
 
     if args.len() > 1 && args[1] == "run" {
         if args.len() < 3 {
-            eprintln!("Usage: fusty run <path_to_script.fy>");
+            eprintln!("B-baka! Usage: fusty run <path_to_script.fy>");
             return ExitCode::FAILURE;
         }
         let path = &args[2];
@@ -162,33 +191,34 @@ fn main() -> ExitCode {
                 }
             }
             Err(e) => {
-                eprintln!("Failed to read file '{}': {}", path, e);
+                eprintln!("Hmph! Couldn't read '{}', dummy! ({}) >.<", path, e);
                 ExitCode::FAILURE
             }
         }
     } else {
-        println!("FustyLang (Fusty) v0.1.0 — Fast Rust-like scripting for Ferrium");
-        println!("(Run with `fusty run <file.fy>` or test built-in game combat demo)\n");
+        println!("FustyLang (~nya) v0.2.0 — Fast, Tsundere Rust-like Scripting");
+        println!("(Run with `fusty run <file.fy>` or enjoy the built-in combat demo... b-baka!)\n");
 
         let demo_script = r#"
-            // Fast Combat & Arena Demo
+            // Fast Combat & Arena Demo (~nya edition)
+            nya boost_speed(base: f64, mult: f64) -> f64 {
+                return base * mult;
+            }
+
             let mut player_pos = vec2(100.0, 50.0);
             let target_pos = vec2(300.0, 200.0);
 
-            // Vector math
             let to_target = target_pos - player_pos;
             let dir = to_target.normalized();
-            let vel = dir * 250.0;
+            let vel = dir * boost_speed(250.0, 1.0);
 
             player_pos += vel * 0.016; // 1 frame tick (60 FPS)
 
-            // Dynamic attack combo with coroutine timing
             wait 0.25;
 
-            // Unchecked safety bypass for raw fast-path
             meow {
                 let fast_val = 1337;
-                log("meow fast_val =", fast_val);
+                purr("meow fast_val =", fast_val);
             }
 
             wait 0.15;
