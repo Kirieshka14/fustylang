@@ -1,54 +1,54 @@
 # FustyLang
 
-**FustyLang** (`.fy`) — быстрый игровой скриптовый язык с Rust-подобным синтаксисом и нативным x86-64 JIT-компилятором. Написан на Rust, без внешних зависимостей.
+**FustyLang** (`.fy`) is a fast, game-first scripting language with Rust-inspired syntax and a native x86-64 JIT compiler. Written in Rust with zero external dependencies.
 
-- Rust-подобный синтаксис с «кавайными» ключевыми словами
-- Tiered JIT: горячие функции компилируются в машинный код
-- Встроенные `vec2` / `vec3` и корутины (`wait`, `yield`)
-- Арена на кадр (`FrameArena`) вместо GC
+- Rust-like syntax with a few kawaii keywords
+- Tiered JIT: hot functions are compiled to native machine code
+- Built-in `vec2` / `vec3` and coroutines (`wait`, `yield`)
+- Per-frame arena allocator (`FrameArena`) instead of a GC
 
-## Содержание
+## Table of Contents
 
-- [Быстрый старт](#быстрый-старт)
-- [Туториал по синтаксису](#туториал-по-синтаксису)
-- [Что нового](#что-нового)
-- [Архитектура](#архитектура)
-- [Планы](#планы)
-- [Лицензия](#лицензия)
+- [Quick Start](#quick-start)
+- [Syntax Tutorial](#syntax-tutorial)
+- [What's New](#whats-new)
+- [Architecture](#architecture)
+- [Roadmap](#roadmap)
+- [License](#license)
 
-## Быстрый старт
+## Quick Start
 
 ```bash
-# Демо
+# Run the built-in demo
 cargo run -p fusty_cli
 
-# Запуск скрипта (со статистикой JIT)
+# Run a script (with JIT stats)
 cargo run -p fusty_cli -- run examples/fibonacci.fy --jit-stats
 
-# Бенчмарк: VM против JIT
+# Benchmark: VM vs JIT
 cargo run -p fusty_cli -- bench examples/jit_benchmark.fy
 
-# Принудительный JIT / чистая VM
+# Force eager JIT / pure VM interpreter
 cargo run -p fusty_cli -- run examples/tsundere_baka.fy --jit
 cargo run -p fusty_cli -- run examples/tsundere_baka.fy --no-jit
 
-# Тесты
+# Run tests
 cargo test --workspace
 ```
 
-## Туториал по синтаксису
+## Syntax Tutorial
 
-### Переменные
+### Variables
 
 ```rust
-let x = 10;          // неизменяемая
-let mut y = 5.0;     // изменяемая
+let x = 10;          // immutable
+let mut y = 5.0;     // mutable
 y += 1.0;
 ```
 
-### Функции — `nya`
+### Functions: `nya`
 
-`nya` заменяет `fn`.
+`nya` replaces `fn`.
 
 ```rust
 nya fib(n: i64) -> i64 {
@@ -57,34 +57,34 @@ nya fib(n: i64) -> i64 {
 }
 ```
 
-### Паника — `baka!`
+### Panics: `baka!`
 
-`baka!` заменяет `panic!`.
+`baka!` replaces `panic!`.
 
 ```rust
-baka!("что-то пошло не так");
+baka!("something went wrong");
 ```
 
-### Небезопасные блоки — `meow`
+### Unsafe blocks: `meow`
 
-`meow` заменяет `unsafe`.
+`meow` replaces `unsafe`.
 
 ```rust
 meow {
-    purr("внутри meow-блока");
+    purr("inside a meow block");
 }
 ```
 
-### Оператор `uwu`
+### The `uwu` operator
 
-`a uwu b` возвращает середину между двумя значениями. Работает с числами (результат всегда `float`), `vec2` и `vec3`. Приоритет выше сравнений и ниже `+`/`-`, ассоциативность левая.
+`a uwu b` returns the midpoint of two values. It works on numbers (the result is always a float), `vec2` and `vec3`. It binds tighter than comparisons, looser than `+`/`-`, and is left-associative.
 
 ```rust
 1 uwu 2;                                   // 1.5
 vec2(0.0, 0.0) uwu vec2(10.0, 20.0);       // vec2(5, 10)
 ```
 
-### Векторы
+### Vectors
 
 ```rust
 let mut pos = vec2(100.0, 50.0);
@@ -92,30 +92,30 @@ let dir = (vec2(300.0, 200.0) - pos).normalized();
 pos += dir * 250.0 * 0.016;
 ```
 
-### Корутины
+### Coroutines
 
 ```rust
-wait 0.25;   // пауза на 0.25 с
-yield;       // отдать управление до следующего кадра
+wait 0.25;   // pause for 0.25 seconds
+yield;       // give control back until the next frame
 ```
 
-### Управление потоком
+### Control flow
 
-`if` / `else`, `while`, `for`, `match`, `return`, `break`, `continue`, а также `struct`, `enum`, `impl`.
+`if` / `else`, `while`, `for`, `match`, `return`, `break`, `continue`, plus `struct`, `enum` and `impl`.
 
-### Встроенные функции
+### Built-in functions
 
-| Функция | Описание |
+| Function | Description |
 | :--- | :--- |
-| `purr(...)` | вывод значений (как `log`) |
-| `log(...)` | вывод значений |
+| `purr(...)` | print values (cute logger) |
+| `log(...)` | print values |
 
-### Полный пример
+### Full example
 
 ```rust
 nya check_hp(hp: i64) -> i64 {
     if hp <= 0 {
-        baka!("HP закончились");
+        baka!("out of HP");
     }
     return hp;
 }
@@ -128,46 +128,46 @@ meow {
 }
 ```
 
-Больше примеров — в папке [`examples/`](examples).
+More examples are in the [`examples/`](examples) folder.
 
-## Что нового
+## What's New
 
 ### 0.2.1
 
-- Оператор `uwu` — середина между числами, `vec2` и `vec3`.
+- `uwu` operator: the midpoint of numbers, `vec2` and `vec3`.
 
 ### 0.2.0
 
-- Нативный x86-64 JIT (tiered, без зависимостей); флаги `--jit`, `--no-jit`, `--jit-stats` и команда `bench`.
-- `fn` → `nya`, `panic!` → `baka!`.
-- Сообщения об ошибках в стиле tsundere.
+- Native x86-64 tiered JIT with zero dependencies; `--jit`, `--no-jit`, `--jit-stats` flags and the `bench` command.
+- `fn` is now `nya`, `panic!` is now `baka!`.
+- Tsundere-style error messages.
 
-Полная история — в [CHANGELOG.md](CHANGELOG.md).
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
-## Архитектура
+## Architecture
 
-| Crate | Назначение |
+| Crate | Purpose |
 | :--- | :--- |
-| `crates/fusty_lexer` | Токенизатор с позициями, вложенные `/* */` комментарии |
-| `crates/fusty_parser` | Парсер в AST (рекурсивный спуск + приоритеты операторов) |
-| `crates/fusty_bytecode` | Компилятор в байткод, проверка неизменяемости |
-| `crates/fusty_jit` | x86-64 JIT: W^X-аллокатор, ассемблер GPR + SSE2, анализатор байткода, tiered-движок |
-| `crates/fusty_vm` | Стековая VM, вызов JIT, `Host` FFI, `FrameArena`, корутины |
-| `crates/fusty_cli` | CLI: `run`, `bench`, флаги JIT |
+| `crates/fusty_lexer` | Span-aware tokenizer, nested `/* */` comments |
+| `crates/fusty_parser` | AST parser (recursive descent + precedence climbing) |
+| `crates/fusty_bytecode` | Bytecode compiler, immutability checks |
+| `crates/fusty_jit` | x86-64 JIT: W^X allocator, GPR + SSE2 assembler, bytecode analyzer, tiered engine |
+| `crates/fusty_vm` | Stack-based VM, JIT dispatch, `Host` FFI, `FrameArena`, coroutines |
+| `crates/fusty_cli` | CLI: `run`, `bench`, JIT flags |
 
-## Планы
+## Roadmap
 
-Основной упор — на развитие JIT.
+The main focus is improving and extending the JIT.
 
-- [ ] Поддержка `vec2` / `vec3` в JIT (SSE-регистры)
-- [ ] Поддержка `uwu` и других новых операторов в JIT
-- [ ] Вызовы между разными JIT-функциями (не только саморекурсия)
-- [ ] Inlining мелких функций
-- [ ] Оптимизации: constant folding, удаление мёртвого кода, аллокация регистров
-- [ ] Компиляция горячих циклов (OSR)
-- [ ] Поддержка `aarch64`
-- [ ] Лучшая диагностика и отладка JIT (дамп машинного кода)
+- [ ] `vec2` / `vec3` support in the JIT (SSE registers)
+- [ ] `uwu` and other new operators in the JIT
+- [ ] Calls between different JIT-compiled functions (not only self-recursion)
+- [ ] Inlining of small functions
+- [ ] Optimizations: constant folding, dead code elimination, register allocation
+- [ ] Hot loop compilation (OSR)
+- [ ] `aarch64` backend
+- [ ] Better JIT diagnostics (machine code dump)
 
-## Лицензия
+## License
 
 [MIT](LICENSE)
