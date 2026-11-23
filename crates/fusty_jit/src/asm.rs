@@ -34,6 +34,27 @@ impl Reg {
     }
 }
 
+/// 128-bit SSE2 floating-point registers (`xmm0`..`xmm7`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Xmm {
+    Xmm0 = 0,
+    Xmm1 = 1,
+    Xmm2 = 2,
+    Xmm3 = 3,
+    Xmm4 = 4,
+    Xmm5 = 5,
+    Xmm6 = 6,
+    Xmm7 = 7,
+}
+
+impl Xmm {
+    #[inline]
+    pub const fn low3(self) -> u8 {
+        (self as u8) & 0x7
+    }
+}
+
 /// Condition codes for x86-64 `jcc` (0x0F 0x80+cc) and `setcc` (0x0F 0x90+cc).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -342,6 +363,83 @@ impl Assembler {
         });
     }
 
+    // --- SSE2 Scalar Double-Precision (f64) ---
+
+    /// `movq xmm, r64` (bitwise transfer of 64 bits from GPR to XMM)
+    pub fn movq_xmm_r(&mut self, dst: Xmm, src: Reg) {
+        self.emit_u8(0x66);
+        self.emit_rex(true, false, false, src.is_ext());
+        self.emit_u8(0x0F);
+        self.emit_u8(0x6E);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
+    /// `movq r64, xmm` (bitwise transfer of 64 bits from XMM to GPR)
+    pub fn movq_r_xmm(&mut self, dst: Reg, src: Xmm) {
+        self.emit_u8(0x66);
+        self.emit_rex(true, false, false, dst.is_ext());
+        self.emit_u8(0x0F);
+        self.emit_u8(0x7E);
+        self.emit_u8(Self::modrm(0b11, src.low3(), dst.low3()));
+    }
+
+    /// `addsd dst, src`
+    pub fn addsd(&mut self, dst: Xmm, src: Xmm) {
+        self.emit_u8(0xF2);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x58);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
+    /// `subsd dst, src`
+    pub fn subsd(&mut self, dst: Xmm, src: Xmm) {
+        self.emit_u8(0xF2);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x5C);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
+    /// `mulsd dst, src`
+    pub fn mulsd(&mut self, dst: Xmm, src: Xmm) {
+        self.emit_u8(0xF2);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x59);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
+    /// `divsd dst, src`
+    pub fn divsd(&mut self, dst: Xmm, src: Xmm) {
+        self.emit_u8(0xF2);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x5E);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
+    /// `ucomisd lhs, rhs` (sets EFLAGS ZF/CF/PF for unsigned-style float jumps)
+    pub fn ucomisd(&mut self, lhs: Xmm, rhs: Xmm) {
+        self.emit_u8(0x66);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x2E);
+        self.emit_u8(Self::modrm(0b11, lhs.low3(), rhs.low3()));
+    }
+
+    /// `xorpd dst, src`
+    pub fn xorpd(&mut self, dst: Xmm, src: Xmm) {
+        self.emit_u8(0x66);
+        self.emit_u8(0x0F);
+        self.emit_u8(0x57);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
+    /// `cvtsi2sd dst, src` (convert signed i64 in GPR to f64 in XMM)
+    pub fn cvtsi2sd(&mut self, dst: Xmm, src: Reg) {
+        self.emit_u8(0xF2);
+        self.emit_rex(true, false, false, src.is_ext());
+        self.emit_u8(0x0F);
+        self.emit_u8(0x2A);
+        self.emit_u8(Self::modrm(0b11, dst.low3(), src.low3()));
+    }
+
     /// Patch all label fixups and return the finalized machine code bytes.
     pub fn finalize(mut self) -> Result<Vec<u8>, JitError> {
         for fixup in &self.fixups {
@@ -402,5 +500,27 @@ mod tests {
         assert_eq!(fact(1), 1);
         assert_eq!(fact(5), 120);
         assert_eq!(fact(10), 3_628_800);
+    }
+
+    #[test]
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    fn test_asm_sse2_float_math() {
+        // extern "C" fn(a: f64, b: f64) -> f64 { (a * b + 1.5) / 2.0 }
+        let mut a = Assembler::new();
+        // SysV ABI: xmm0 = a, xmm1 = b
+        a.mulsd(Xmm::Xmm0, Xmm::Xmm1);
+        a.mov_ri64(Reg::Rax, 1.5f64.to_bits() as i64);
+        a.movq_xmm_r(Xmm::Xmm2, Reg::Rax);
+        a.addsd(Xmm::Xmm0, Xmm::Xmm2);
+        a.mov_ri64(Reg::Rax, 2.0f64.to_bits() as i64);
+        a.movq_xmm_r(Xmm::Xmm2, Reg::Rax);
+        a.divsd(Xmm::Xmm0, Xmm::Xmm2);
+        a.ret();
+
+        let bytes = a.finalize().unwrap();
+        let buf = ExecutableBuffer::from_code(&bytes).unwrap();
+        let f: extern "C" fn(f64, f64) -> f64 = unsafe { std::mem::transmute(buf.as_ptr()) };
+        let out = f(3.0, 4.0);
+        assert!((out - 6.75).abs() < 1e-12);
     }
 }
