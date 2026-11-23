@@ -374,4 +374,87 @@ mod tests {
         assert_eq!(vm_eager.jit_stats().compiled_functions, 1);
         assert_eq!(vm_eager.jit_stats().native_calls, 5);
     }
+
+    #[test]
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    fn test_jit_vm_parity_arithmetic_comparisons_and_f64() {
+        let src = r#"
+            nya collatz_steps(start: i64) -> i64 {
+                let mut n = start;
+                let mut steps = 0;
+                while n != 1 {
+                    if n % 2 == 0 {
+                        n = n / 2;
+                    } else {
+                        n = n * 3 + 1;
+                    }
+                    steps += 1;
+                }
+                return steps;
+            }
+
+            nya poly_f64(x: f64, iters: f64) -> f64 {
+                let mut acc = x;
+                let mut i = 0.0;
+                while i < iters {
+                    acc = (acc * 1.25 - 0.5) / 1.1;
+                    i = i + 1.0;
+                }
+                return acc;
+            }
+
+            let c = collatz_steps(27);
+            let p = poly_f64(4.0, 6.0);
+            return p + c;
+        "#;
+        let chunk = compile_src(src);
+
+        let mut vm_interp = Vm::with_jit_mode(fusty_jit::JitMode::Disabled);
+        let interp_val = match vm_interp.run(&chunk).unwrap() {
+            VmResult::Done(Value::Float(f)) => f,
+            other => panic!("Unexpected VM result: {:?}", other),
+        };
+
+        let mut vm_jit = Vm::with_jit_mode(fusty_jit::JitMode::Eager);
+        let jit_val = match vm_jit.run(&chunk).unwrap() {
+            VmResult::Done(Value::Float(f)) => f,
+            other => panic!("Unexpected JIT result: {:?}", other),
+        };
+
+        assert!((interp_val - jit_val).abs() < 1e-12);
+        assert_eq!(vm_jit.jit_stats().compiled_functions, 2);
+        assert_eq!(vm_jit.jit_stats().native_calls, 2);
+    }
+
+    #[test]
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    fn test_jit_div_zero_and_baka_fallback_in_eager_mode() {
+        let div_src = r#"
+            nya bad_div(a: i64, b: i64) -> i64 {
+                return a / b;
+            }
+            return bad_div(10, 0);
+        "#;
+        let chunk = compile_src(div_src);
+        let mut vm = Vm::with_jit_mode(fusty_jit::JitMode::Eager);
+        let err = vm.run(&chunk).unwrap_err();
+        assert!(err.message.contains("B-baka!"));
+        assert!(err.message.contains("Division by zero"));
+
+        let baka_src = r#"
+            nya angry(x: i64) -> i64 {
+                if x < 0 {
+                    baka!("too negative!");
+                }
+                return x;
+            }
+            return angry(-5);
+        "#;
+        let chunk2 = compile_src(baka_src);
+        let mut vm2 = Vm::with_jit_mode(fusty_jit::JitMode::Eager);
+        let err2 = vm2.run(&chunk2).unwrap_err();
+        assert!(err2.message.contains("[BAKA! >///<]"));
+        assert!(err2.message.contains("too negative!"));
+        assert_eq!(vm2.jit_stats().compiled_functions, 0);
+    }
 }
