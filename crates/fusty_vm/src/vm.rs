@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::arena::FrameArena;
+use crate::gc::{GcConfig, GcHeap, GcStats};
 use crate::value::{Value, Vec2, Vec3};
 use fusty_bytecode::chunk::{Chunk, Constant};
 use fusty_bytecode::opcode::Opcode;
@@ -47,6 +48,7 @@ pub struct VmError {
 
 pub struct Vm {
     pub frame_arena: FrameArena,
+    pub gc: GcHeap,
     pub stack: Vec<Value>,
     pub globals: Vec<Value>,
     pub frames: Vec<CallFrame>,
@@ -90,8 +92,13 @@ impl Vm {
     }
 
     pub fn with_jit_mode(mode: JitMode) -> Self {
+        Self::with_jit_and_gc(mode, GcConfig::default())
+    }
+
+    pub fn with_jit_and_gc(mode: JitMode, gc_config: GcConfig) -> Self {
         Self {
             frame_arena: FrameArena::new(1024 * 1024), // 1MB frame arena
+            gc: GcHeap::with_config(gc_config),
             stack: Vec::with_capacity(512),
             globals: Vec::with_capacity(32),
             frames: Vec::with_capacity(32),
@@ -110,8 +117,49 @@ impl Vm {
         self.jit.set_mode(mode);
     }
 
+    #[inline]
+    pub fn gc_is_enabled(&self) -> bool {
+        self.gc.is_enabled()
+    }
+
+    #[inline]
+    pub fn gc_enable(&mut self) {
+        self.gc.enable();
+    }
+
+    #[inline]
+    pub fn gc_disable(&mut self) {
+        self.gc.disable();
+    }
+
+    #[inline]
+    pub fn set_gc_enabled(&mut self, enabled: bool) {
+        self.gc.set_enabled(enabled);
+    }
+
+    #[inline]
+    pub fn set_gc_threshold(&mut self, bytes: usize) {
+        self.gc.set_threshold(bytes);
+    }
+
+    #[inline]
+    pub fn gc_stats(&self) -> GcStats {
+        self.gc.stats()
+    }
+
+    pub fn gc_collect(&mut self) -> usize {
+        self.gc.collect(&[])
+    }
+
+    pub fn gc_step(&mut self, budget: usize) -> usize {
+        self.gc.step(&[], budget)
+    }
+
     pub fn reset_frame(&mut self) {
         self.frame_arena.reset();
+        if self.gc.should_collect() {
+            self.gc.collect(&[]);
+        }
     }
 
     pub fn reset_execution(&mut self) {
@@ -122,6 +170,7 @@ impl Vm {
         self.meow_depth = 0;
         self.meow_mode = false;
         self.jit.clear();
+        self.gc.clear();
         self.frame_arena.reset();
     }
 
@@ -732,6 +781,22 @@ impl Vm {
                             }
                         } else {
                             self.jit.record_fallback();
+                            if self.jit.mode() != JitMode::Disabled {
+                                self.jit.record_fallback_diagnostic(
+                                    &meta.name,
+                                    None,
+                                    "non-homogeneous or non-scalar argument types",
+                                );
+                            }
+                        }
+                    } else {
+                        self.jit.record_fallback();
+                        if self.jit.mode() != JitMode::Disabled {
+                            self.jit.record_fallback_diagnostic(
+                                &meta.name,
+                                None,
+                                format!("arity {} exceeds JIT limit (16)", argc_usize),
+                            );
                         }
                     }
 
@@ -766,13 +831,65 @@ impl Vm {
                         });
                     }
                     let split_at = self.stack.len() - argc;
-                    let meow = self.meow_mode;
-                    let res = host
-                        .call_native(fn_name, &self.stack[split_at..], meow)
-                        .map_err(|message| VmError {
-                            message,
-                            line: line_at(chunk, op_ip),
-                        })?;
+                    let builtin_gc_res = match fn_name {
+                        "gc_enable" if argc == 0 => {
+                            self.gc.enable();
+                            Some(Ok(Value::Bool(true)))
+                        }
+                        "gc_disable" if argc == 0 => {
+                            self.gc.disable();
+                            Some(Ok(Value::Bool(false)))
+                        }
+                        "gc_is_enabled" if argc == 0 => {
+                            Some(Ok(Value::Bool(self.gc.is_enabled())))
+                        }
+                        "gc_collect" if argc == 0 => {
+                            let freed = self.gc_collect();
+                            Some(Ok(Value::Int(freed as i64)))
+                        }
+                        "gc_step" if argc <= 1 => {
+                            let budget = if argc == 1 {
+                                match &self.stack[split_at] {
+                                    Value::Int(n) => (*n).max(1) as usize,
+                                    Value::Float(f) => (*f).max(1.0) as usize,
+                                    other => {
+                                        return Err(VmError {
+                                            message: format!(
+                                                "'gc_step' expected integer budget, got {}",
+                                                other
+                                            ),
+                                            line: line_at(chunk, op_ip),
+                                        });
+                                    }
+                                }
+                            } else {
+                                self.gc.config().step_budget_objects
+                            };
+                            let freed = self.gc_step(budget);
+                            Some(Ok(Value::Int(freed as i64)))
+                        }
+                        "gc_live_objects" if argc == 0 => {
+                            Some(Ok(Value::Int(self.gc.stats().live_objects as i64)))
+                        }
+                        "gc_live_bytes" if argc == 0 => {
+                            Some(Ok(Value::Int(self.gc.stats().live_bytes as i64)))
+                        }
+                        "gc_collections" if argc == 0 => {
+                            Some(Ok(Value::Int(self.gc.stats().collections as i64)))
+                        }
+                        _ => None,
+                    };
+
+                    let res = if let Some(r) = builtin_gc_res {
+                        r
+                    } else {
+                        let meow = self.meow_mode;
+                        host.call_native(fn_name, &self.stack[split_at..], meow)
+                    }
+                    .map_err(|message| VmError {
+                        message,
+                        line: line_at(chunk, op_ip),
+                    })?;
                     self.stack.truncate(split_at);
                     self.stack.push(res);
                 }

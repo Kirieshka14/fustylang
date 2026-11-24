@@ -1,4 +1,5 @@
 pub mod arena;
+pub mod gc;
 pub mod value;
 pub mod vm;
 
@@ -484,5 +485,46 @@ mod tests {
         assert!(err2.message.contains("[BAKA! >///<]"));
         assert!(err2.message.contains("too negative!"));
         assert_eq!(vm2.jit_stats().compiled_functions, 0);
+        assert!(!vm2.jit_stats().fallback_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn test_vm_controllable_gc_intrinsics_enabled_by_default() {
+        let src = r#"
+            let initial = gc_is_enabled();
+            gc_disable();
+            let after_disable = gc_is_enabled();
+            gc_enable();
+            let after_enable = gc_is_enabled();
+            let freed = gc_collect();
+            let stepped = gc_step(16);
+            if initial && !after_disable && after_enable {
+                return gc_collections() + freed + stepped;
+            }
+            return -1;
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::new();
+        assert!(vm.gc_is_enabled());
+        let res = vm.run(&chunk).expect("GC intrinsics should execute cleanly");
+        assert!(matches!(res, VmResult::Done(Value::Int(n)) if n >= 1));
+    }
+
+    #[test]
+    fn test_vm_silent_jit_fallback_records_diagnostics_for_mixed_args() {
+        let src = r#"
+            nya add_any(a: f64, b: f64) -> f64 {
+                return a + b;
+            }
+            return add_any(1, 2.5);
+        "#;
+        let chunk = compile_src(src);
+        let mut vm = Vm::with_jit_mode(fusty_jit::JitMode::Eager);
+        let res = vm.run(&chunk).expect("mixed-type call must silently fall back to VM");
+        assert_eq!(res, VmResult::Done(Value::Float(3.5)));
+        let stats = vm.jit_stats();
+        assert_eq!(stats.vm_fallbacks, 1);
+        assert_eq!(stats.fallback_diagnostics.len(), 1);
+        assert_eq!(stats.fallback_diagnostics[0].function, "add_any");
     }
 }
