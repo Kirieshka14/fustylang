@@ -203,6 +203,12 @@ fn run_source(source: &str, file_name: &str, opts: RunOptions) -> bool {
                             s.compiled_names.join(", ")
                         );
                     }
+                    if !s.fallback_diagnostics.is_empty() {
+                        println!("  [JIT DIAG] Silent VM fallback diagnostics:");
+                        for diag in &s.fallback_diagnostics {
+                            println!("    - {}", diag);
+                        }
+                    }
                 }
                 return true;
             }
