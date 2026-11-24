@@ -63,11 +63,81 @@ impl CompiledFunction {
     }
 }
 
-/// 128 virtual stack slots (1024 bytes) + 8 bytes padding for 16-byte SysV ABI alignment.
+/// Calling convention ABI targeted by the x86-64 JIT backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetAbi {
+    /// System V AMD64 ABI (Linux & macOS x86-64): args in RDI, RSI, RDX.
+    SysV,
+    /// Microsoft x64 ABI (Windows x86-64): args in RCX, RDX, R8 + 32-byte shadow space.
+    Win64,
+}
+
+impl TargetAbi {
+    #[inline]
+    pub const fn host() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            Self::Win64
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Self::SysV
+        }
+    }
+
+    #[inline]
+    const fn arg0(self) -> Reg {
+        match self {
+            Self::SysV => Reg::Rdi,
+            Self::Win64 => Reg::Rcx,
+        }
+    }
+
+    #[inline]
+    const fn arg1(self) -> Reg {
+        match self {
+            Self::SysV => Reg::Rsi,
+            Self::Win64 => Reg::Rdx,
+        }
+    }
+
+    #[inline]
+    const fn arg2(self) -> Reg {
+        match self {
+            Self::SysV => Reg::Rdx,
+            Self::Win64 => Reg::R8,
+        }
+    }
+
+    #[inline]
+    const fn shadow_space_bytes(self) -> i32 {
+        match self {
+            Self::SysV => 0,
+            Self::Win64 => 32,
+        }
+    }
+}
+
+/// 128 virtual stack slots (1024 bytes) + 8 bytes padding for 16-byte stack alignment.
 const VSTACK_FRAME_BYTES: i32 = 1032;
 const MAX_JIT_RECURSION_DEPTH: i64 = 256;
 
-/// Compiles `chunk.functions[fn_idx]` into native x86-64 machine code.
+/// Emits native x86-64 machine code for `chunk.functions[fn_idx]` targeting `abi`.
+pub fn emit_machine_code_for_abi(
+    chunk: &Chunk,
+    fn_idx: usize,
+    kind: JitValueKind,
+    abi: TargetAbi,
+) -> Result<(AnalyzedFunction, Vec<u8>), JitError> {
+    let analyzed = analyze_function(chunk, fn_idx, kind)?;
+    let machine_code = match kind {
+        JitValueKind::Int64 => emit_i64_function(&analyzed, abi)?,
+        JitValueKind::Float64 => emit_f64_function(&analyzed, abi)?,
+    };
+    Ok((analyzed, machine_code))
+}
+
+/// Compiles `chunk.functions[fn_idx]` into native x86-64 machine code for the host OS.
 pub fn compile_function(
     chunk: &Chunk,
     fn_idx: usize,
@@ -75,15 +145,12 @@ pub fn compile_function(
 ) -> Result<CompiledFunction, JitError> {
     if !crate::is_supported_platform() {
         return Err(JitError::new(
-            "Native x86-64 Linux JIT is unsupported on this target",
+            "Native x86-64 JIT is unsupported on this target",
         ));
     }
 
-    let analyzed = analyze_function(chunk, fn_idx, kind)?;
-    let machine_code = match kind {
-        JitValueKind::Int64 => emit_i64_function(&analyzed)?,
-        JitValueKind::Float64 => emit_f64_function(&analyzed)?,
-    };
+    let (analyzed, machine_code) =
+        emit_machine_code_for_abi(chunk, fn_idx, kind, TargetAbi::host())?;
 
     let buffer = ExecutableBuffer::from_code(&machine_code)?;
     Ok(CompiledFunction {
@@ -112,7 +179,7 @@ fn emit_peek(asm: &mut Assembler, reg: Reg) {
     asm.mov_rm_disp(reg, Reg::R13, -8);
 }
 
-fn emit_i64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
+fn emit_i64_function(func: &AnalyzedFunction, abi: TargetAbi) -> Result<Vec<u8>, JitError> {
     let mut asm = Assembler::new();
 
     let entry_label = asm.create_label();
@@ -144,17 +211,17 @@ fn emit_i64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
     // R15 = recursion depth
     asm.mov_rr(Reg::R12, Reg::Rsp);
     asm.mov_rr(Reg::R13, Reg::Rsp);
-    asm.mov_rr(Reg::R14, Reg::Rsi);
-    asm.mov_rr(Reg::R15, Reg::Rdx);
+    asm.mov_rr(Reg::R14, abi.arg1());
+    asm.mov_rr(Reg::R15, abi.arg2());
 
     // Guard recursion depth against stack overflow
     asm.mov_ri64(Reg::Rax, MAX_JIT_RECURSION_DEPTH);
     asm.cmp_rr(Reg::R15, Reg::Rax);
     asm.jcc_label(Cond::Ge, stack_overflow_label);
 
-    // Copy `arity` arguments from [rdi + i*8] into virtual stack slots [r12 + i*8]
+    // Copy `arity` arguments from [arg0 + i*8] into virtual stack slots [r12 + i*8]
     for i in 0..func.arity as i32 {
-        asm.mov_rm_disp(Reg::Rax, Reg::Rdi, i * 8);
+        asm.mov_rm_disp(Reg::Rax, abi.arg0(), i * 8);
         asm.mov_mr_disp(Reg::R12, i * 8, Reg::Rax);
     }
     if func.arity > 0 {
@@ -264,11 +331,18 @@ fn emit_i64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
             }
             DecodedOp::SelfCall { argc } => {
                 let bytes = (argc as i32) * 8;
+                let shadow = abi.shadow_space_bytes();
                 asm.lea_disp(Reg::R13, Reg::R13, -bytes);
-                asm.mov_rr(Reg::Rdi, Reg::R13);
-                asm.mov_rr(Reg::Rsi, Reg::R14);
-                asm.lea_disp(Reg::Rdx, Reg::R15, 1);
+                asm.mov_rr(abi.arg0(), Reg::R13);
+                asm.mov_rr(abi.arg1(), Reg::R14);
+                asm.lea_disp(abi.arg2(), Reg::R15, 1);
+                if shadow > 0 {
+                    asm.sub_rsp_i32(shadow);
+                }
                 asm.call_label(entry_label);
+                if shadow > 0 {
+                    asm.add_rsp_i32(shadow);
+                }
                 asm.cmp_byte_mr_zero(Reg::R14);
                 asm.jcc_label(Cond::Ne, epilogue_label);
                 emit_push(&mut asm, Reg::Rax);
@@ -333,7 +407,7 @@ fn emit_f64_cmp(asm: &mut Assembler, cond: Cond) {
     emit_push(asm, Reg::Rax);
 }
 
-fn emit_f64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
+fn emit_f64_function(func: &AnalyzedFunction, abi: TargetAbi) -> Result<Vec<u8>, JitError> {
     let mut asm = Assembler::new();
 
     let entry_label = asm.create_label();
@@ -359,15 +433,15 @@ fn emit_f64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
 
     asm.mov_rr(Reg::R12, Reg::Rsp);
     asm.mov_rr(Reg::R13, Reg::Rsp);
-    asm.mov_rr(Reg::R14, Reg::Rsi);
-    asm.mov_rr(Reg::R15, Reg::Rdx);
+    asm.mov_rr(Reg::R14, abi.arg1());
+    asm.mov_rr(Reg::R15, abi.arg2());
 
     asm.mov_ri64(Reg::Rax, MAX_JIT_RECURSION_DEPTH);
     asm.cmp_rr(Reg::R15, Reg::Rax);
     asm.jcc_label(Cond::Ge, stack_overflow_label);
 
     for i in 0..func.arity as i32 {
-        asm.mov_rm_disp(Reg::Rax, Reg::Rdi, i * 8);
+        asm.mov_rm_disp(Reg::Rax, abi.arg0(), i * 8);
         asm.mov_mr_disp(Reg::R12, i * 8, Reg::Rax);
     }
     if func.arity > 0 {
@@ -499,11 +573,18 @@ fn emit_f64_function(func: &AnalyzedFunction) -> Result<Vec<u8>, JitError> {
             }
             DecodedOp::SelfCall { argc } => {
                 let bytes = (argc as i32) * 8;
+                let shadow = abi.shadow_space_bytes();
                 asm.lea_disp(Reg::R13, Reg::R13, -bytes);
-                asm.mov_rr(Reg::Rdi, Reg::R13);
-                asm.mov_rr(Reg::Rsi, Reg::R14);
-                asm.lea_disp(Reg::Rdx, Reg::R15, 1);
+                asm.mov_rr(abi.arg0(), Reg::R13);
+                asm.mov_rr(abi.arg1(), Reg::R14);
+                asm.lea_disp(abi.arg2(), Reg::R15, 1);
+                if shadow > 0 {
+                    asm.sub_rsp_i32(shadow);
+                }
                 asm.call_label(entry_label);
+                if shadow > 0 {
+                    asm.add_rsp_i32(shadow);
+                }
                 asm.cmp_byte_mr_zero(Reg::R14);
                 asm.jcc_label(Cond::Ne, epilogue_label);
                 asm.movq_r_xmm(Reg::Rax, Xmm::Xmm0);
@@ -557,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    #[cfg(all(target_arch = "x86_64", any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     fn test_jit_compile_i64_loop_and_recursive_fib() {
         let src = r#"
             nya sum_to(n: i64) -> i64 {
@@ -591,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    #[cfg(all(target_arch = "x86_64", any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     fn test_jit_i64_div_zero_and_stack_overflow_safe() {
         let src = r#"
             nya safe_div(a: i64, b: i64) -> i64 {
@@ -618,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    #[cfg(all(target_arch = "x86_64", any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     fn test_jit_compile_f64_sse2_physics_and_div_zero() {
         let src = r#"
             nya integrate(v0: f64, acc: f64, steps: f64) -> f64 {
@@ -647,5 +728,25 @@ mod tests {
             r.call_f64(&[9.0, 0.0]).unwrap_err(),
             JitRuntimeErr::DivisionByZero
         );
+    }
+
+    #[test]
+    fn test_sysv_and_win64_abi_codegen() {
+        let src = r#"
+            nya fib(n: i64) -> i64 {
+                if n <= 1 { return n; }
+                return fib(n - 1) + fib(n - 2);
+            }
+        "#;
+        let chunk = compile_chunk(src);
+        let (_, sysv_code) =
+            emit_machine_code_for_abi(&chunk, 0, JitValueKind::Int64, TargetAbi::SysV)
+                .expect("SysV codegen");
+        let (_, win64_code) =
+            emit_machine_code_for_abi(&chunk, 0, JitValueKind::Int64, TargetAbi::Win64)
+                .expect("Win64 codegen");
+        assert!(!sysv_code.is_empty());
+        // Win64 reserves 32-byte shadow space around recursive self-calls, so it emits more bytes.
+        assert!(win64_code.len() > sysv_code.len());
     }
 }
